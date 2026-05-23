@@ -1,0 +1,160 @@
+package main
+
+import (
+	"os"
+	"strings"
+)
+
+// LangManager handles application translations
+type LangManager struct {
+	currentLang  string
+	translations map[string]map[string]string
+}
+
+var lang *LangManager
+
+func initLang() {
+	lang = &LangManager{
+		currentLang:  "en", // Default fallback
+		translations: make(map[string]map[string]string),
+	}
+
+	// English translations
+	lang.translations["en"] = map[string]string{
+		"orig_deleted":        " (original deleted)",
+		"link_broken":         " (link broken)",
+		"btn_restore":         "Restore",
+		"btn_unbind":          "Unbind",
+		"btn_destroy":         "Delete",
+		"hint_restore":        "Restore: deletes link and database record, moves saves back to original path",
+		"hint_unbind":         "Unbind: deletes link and database record, keeps saves in storage",
+		"hint_destroy":        "Delete: deletes link AND database record AND saves from storage",
+		"confirm_title":       "Confirmation",
+		"confirm_restore_msg": "Restore saves to original folder and remove from storage?\n%s",
+		"confirm_unbind_msg":  "Unbind only? (Saves will remain in storage)\n%s",
+		"confirm_destroy_msg": "DANGER! Delete saves from BOTH original and storage?\n%s",
+		"err_delete":          "Failed to remove link: %w",
+		"err_restore":         "Restore error: %w",
+		"err_destroy":         "Destroy error: %w",
+		"check_confirm":       "Confirm deletion",
+		"lbl_db_file":         "Database file:",
+		"lbl_storage":         "Storage:",
+		"lbl_saves_path":      "Saves path:",
+		"btn_bind":            "Bind",
+		"btn_verify":          "Verify & Restore Broken Links",
+		"err_no_storage":      "Specify storage first",
+		"err_no_saves":        "Specify full path to saves",
+		"err_path_process":    "Failed to process path:\n%w",
+		"err_not_folder":      "Path is not a folder or does not exist",
+		"err_game_name":       "Failed to determine game name",
+		"err_db_parse":        "Failed to parse database file:\n%w",
+		"err_db_mkdir":        "Failed to create database directory:\n%w",
+		"err_db_encode":       "Failed to encode database content:\n%w",
+		"err_db_write":        "Failed to write database file:\n%w",
+		"err_restore_mkdir":   "Failed to recreate original folder:\n%w",
+		"err_clean_storage":   "Files restored, but failed to clean up storage folder:\n%w",
+		"err_move_cleanup":    "failed to remove source file after copying: %w",
+		"err_already_exists":  "Folder %s already exists in storage",
+		"err_create_storage":  "Failed to create folder in storage:\n%w",
+		"err_empty_folder":    "Folder is not empty after transfer (hidden files?)",
+		"err_junction":        "Failed to create junction:\nmklink returned an error",
+		"err_bind_failed":     "Failed to complete binding:\n%w",
+		"success_bind":        "Game saves \"%s\" are bound to storage",
+		"verify_title":        "Verification",
+		"verify_ok":           "All links are fine",
+		"verify_found_msg":    "Found %d broken links. Restore all?",
+		"verify_restore_err":  "Failed to restore some links:\n%s",
+		"verify_restore_ok":   "All broken links have been restored",
+		"unknown_type":        "Unknown type",
+	}
+
+	// Russian translations
+	lang.translations["ru"] = map[string]string{
+		"orig_deleted":        " (оригинал удален)",
+		"link_broken":         " (ссылка сломана)",
+		"btn_restore":         "Восстановить",
+		"btn_unbind":          "Отвязать",
+		"btn_destroy":         "Удалить",
+		"hint_restore":        "Восстановление: удаляет ссылку и запись в базе, перемещает сейвы обратно на оригинальное место",
+		"hint_unbind":         "Отвязка: удаляет ссылку и запись в базе, но оставляет папку с сейвами в хранилище",
+		"hint_destroy":        "Удаление: удаляет И ссылку, И запись в базе, И папку с сохранениями из хранилища",
+		"confirm_title":       "Подтверждение",
+		"confirm_restore_msg": "Восстановить сохранения в оригинальную папку и убрать из хранилища?\n%s",
+		"confirm_unbind_msg":  "Только отвязать? (Сохранения останутся в хранилище)\n%s",
+		"confirm_destroy_msg": "ВНИМАНИЕ! Удалить сохранения ИЗ ХРАНИЛИЩА навсегда?\n%s",
+		"err_delete":          "Не удалось удалить ссылку: %w",
+		"err_restore":         "Ошибка восстановления: %w",
+		"err_destroy":         "Ошибка удаления: %w",
+		"check_confirm":       "Подтверждать удаление",
+		"lbl_db_file":         "Файл базы данных:",
+		"lbl_storage":         "Хранилище:",
+		"lbl_saves_path":      "Путь к сейвам:",
+		"btn_bind":            "Привязать",
+		"btn_verify":          "Проверить и восстановить неработающие ссылки",
+		"err_no_storage":      "Сначала укажи хранилище",
+		"err_no_saves":        "Укажи полный путь к сохранениям",
+		"err_path_process":    "Не удалось обработать путь:\n%w",
+		"err_not_folder":      "Путь не является папкой или не существует",
+		"err_game_name":       "Не удалось определить имя игры",
+		"err_db_parse":        "Не удалось прочитать файл базы данных:\n%w",
+		"err_db_mkdir":        "Не удалось создать папку базы данных:\n%w",
+		"err_db_encode":       "Не удалось закодировать содержимое базы данных:\n%w",
+		"err_db_write":        "Не удалось записать файл базы данных:\n%w",
+		"err_restore_mkdir":   "Не удалось пересоздать оригинальную папку:\n%w",
+		"err_clean_storage":   "Файлы восстановлены, но не удалось очистить папку в хранилище:\n%w",
+		"err_move_cleanup":    "не удалось удалить исходный файл после копирования: %w",
+		"err_already_exists":  "Папка %s уже существует в хранилище",
+		"err_create_storage":  "Не удалось создать папку в хранилище:\n%w",
+		"err_empty_folder":    "После переноса папка не пуста (возможно, скрытые файлы)",
+		"err_junction":        "Не удалось создать junction:\nmklink вернул ошибку",
+		"err_bind_failed":     "Не удалось завершить привязку:\n%w",
+		"success_bind":        "Сохранения игры \"%s\" привязаны к хранилищу",
+		"verify_title":        "Проверка",
+		"verify_ok":           "Все ссылки в порядке",
+		"verify_found_msg":    "Найдено %d сломанных ссылок. Восстановить все?",
+		"verify_restore_err":  "Не удалось восстановить некоторые ссылки:\n%s",
+		"verify_restore_ok":   "Все сломанные ссылки восстановлены",
+		"unknown_type":        "Неизвестный тип",
+	}
+}
+
+// GetDefaultSystemLang returns ru or en based on system environment
+func GetDefaultSystemLang() string {
+	sysLang := os.Getenv("LANG")
+
+	if sysLang == "" {
+		sysLang = os.Getenv("LC_ALL")
+	}
+
+	// Windows fallback detection via light env vars or default to ru if containing RU
+	if strings.Contains(strings.ToLower(sysLang), "ru") {
+		return "ru"
+	}
+
+	return "en"
+}
+
+// T retrieves the translated string by key
+func T(key string) string {
+	if lang == nil {
+		initLang()
+	}
+	if locales, ok := lang.translations[lang.currentLang]; ok {
+		if text, found := locales[key]; found {
+			return text
+		}
+	}
+
+	// Fallback to English if key not found in current locale
+	return lang.translations["en"][key]
+}
+
+// SetLanguage allows switching language at runtime
+func SetLanguage(locale string) {
+	if lang == nil {
+		initLang()
+	}
+	if _, ok := lang.translations[locale]; ok {
+		lang.currentLang = locale
+	}
+}

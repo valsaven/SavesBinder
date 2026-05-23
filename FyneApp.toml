@@ -1,0 +1,8 @@
+Website = "https://github.com/valsaven/SavesBinder"
+
+[Details]
+Icon = "Icon.png"
+Name = "Val's Saves Binder"
+ID = "com.github.valsaven.savesbinder"
+Version = "1.0.0"
+Build = 1
