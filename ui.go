@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -77,7 +78,21 @@ func (h *HoverButton) MouseMoved(e *desktop.MouseEvent) {
 func (a *SavesBinderApp) refreshList() {
 	a.listContainer.Objects = nil
 
+	filter := ""
+	if a.searchEntry != nil {
+		filter = strings.ToLower(strings.TrimSpace(a.searchEntry.Text))
+	}
+
 	for _, pair := range a.db.Links {
+		if filter != "" {
+			targetLower := strings.ToLower(pair.Target)
+			linkLower := strings.ToLower(pair.Link)
+
+			if !strings.Contains(targetLower, filter) && !strings.Contains(linkLower, filter) {
+				continue
+			}
+		}
+
 		p := pair // Capture variable for closure
 
 		_, errTarget := os.Stat(p.Target)
@@ -228,7 +243,15 @@ func (a *SavesBinderApp) buildUI() fyne.CanvasObject {
 		langSelect.SetSelected("EN")
 	}
 
+	// Search input (filter for the list above). Placed inside the form so all inputs live together.
+	a.searchEntry = widget.NewEntry()
+	a.searchEntry.SetPlaceHolder(T("search_placeholder"))
+	a.searchEntry.OnChanged = func(string) {
+		a.refreshList()
+	}
+
 	form := widget.NewForm(
+		widget.NewFormItem(T("lbl_search"), a.searchEntry),
 		widget.NewFormItem(T("lbl_db_file"), container.NewBorder(nil, nil, nil, btnBrowseDb, a.dbPathEntry)),
 		widget.NewFormItem(T("lbl_storage"), container.NewBorder(nil, nil, nil, btnBrowseStorage, a.storageEntry)),
 		widget.NewFormItem(T("lbl_saves_path"), container.NewBorder(nil, nil, nil, btnBrowseBind, a.toBindEntry)),
@@ -258,6 +281,6 @@ func (a *SavesBinderApp) buildUI() fyne.CanvasObject {
 
 	a.refreshList()
 
-	// Place list at the top/center, controls at the bottom
+	// Form (with all inputs including Search) at the bottom, list above it
 	return container.NewBorder(nil, bottomFrame, nil, nil, scrollContainer)
 }
