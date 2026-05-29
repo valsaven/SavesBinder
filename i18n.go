@@ -66,6 +66,8 @@ func initLang() {
 		"verify_restore_err":  "Failed to restore some links:\n%s",
 		"verify_restore_ok":   "All broken links have been restored",
 		"unknown_type":        "Unknown type",
+		"lbl_search":          "Search",
+		"search_placeholder":  "Filter by path...",
 	}
 
 	// Russian translations
@@ -115,6 +117,8 @@ func initLang() {
 		"verify_restore_err":  "Не удалось восстановить некоторые ссылки:\n%s",
 		"verify_restore_ok":   "Все сломанные ссылки восстановлены",
 		"unknown_type":        "Неизвестный тип",
+		"lbl_search":          "Поиск",
+		"search_placeholder":  "Фильтр по пути...",
 	}
 }
 

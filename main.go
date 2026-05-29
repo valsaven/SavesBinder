@@ -15,6 +15,7 @@ type SavesBinderApp struct {
 	toBindEntry   *widget.Entry
 	confirmCheck  *widget.Check
 	listContainer *fyne.Container
+	searchEntry   *widget.Entry
 	db            AppDatabase
 }
 
