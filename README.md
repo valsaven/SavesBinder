@@ -4,7 +4,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A lightweight Windows GUI tool designed to centralize your game saves using NTFS Junctions (`mklink /J`).
+A lightweight Windows GUI tool designed to centralize your game saves using NTFS directory junctions.
 
 Move your saves to a single secure directory while keeping the original paths fully functional.
 
@@ -23,7 +23,7 @@ With **SavesBinder**, you can finally gather all your saves into one clean, cent
 - **Effortless Binding** - Select a game's save folder: it automatically moves to your central storage and leaves a working junction behind.
 - **Centralized Management** - Keep all your precious saves in one dedicated place for easy backups.
 - **Broken Link Detection** - Instantly scan, verify and repair broken junctions with a single click (convenient after reinstalling the system).
-- **Native NTFS Junctions** - Uses native Windows symlinks, ensuring 100% compatibility with games.
+- **Native NTFS Junctions** - Creates real directory junctions via the Windows reparse-point API.
 - **Clean Fyne GUI** - Simple, intuitive and modern lightweight interface.
 - **Human-Readable Config** - Links and paths are stored in a simple, portable JSON file.
 - **Safe Operations** - Built-in confirmation dialogs prevent accidental data loss.
@@ -61,7 +61,7 @@ With **SavesBinder**, you can finally gather all your saves into one clean, cent
 
 ## Important Notes
 
-- This tool relies on **Junctions** (`mklink /J`), which require an **NTFS** file system (the standard for Windows drives).
+- Junctions require an **NTFS** volume (the default for Windows system drives).
 - While the file transfer process is fully safe, it is always recommended to make a manual backup the first time you try it on a new game.
 - **Do not delete junction folders manually** via File Explorer - always use the **Unbind** or **Restore** buttons inside the application to manage them safely.
 
@@ -77,6 +77,7 @@ With **SavesBinder**, you can finally gather all your saves into one clean, cent
 
 - **Windows 10 / 11**
 - NTFS-formatted storage drives
+- To build from source: **Go 1.26+**, a C compiler for CGO (e.g. MinGW/`gcc`) and Git
 
 ---
 
@@ -84,7 +85,7 @@ With **SavesBinder**, you can finally gather all your saves into one clean, cent
 
 ### Pre-built Binary
 
-Go to the [Releases](https://github.com/valsaven/SavesBinder/releases) page, download the latest executable file and run it. No installation required.
+Download the latest `SavesBinder.exe` from [Releases](https://github.com/valsaven/SavesBinder/releases) and run it. No installation required.
 
 ### Building from Source
 
@@ -95,7 +96,6 @@ If you prefer to compile the application yourself, make sure you have Go install
    ```shell
    git clone git@github.com:valsaven/SavesBinder.git
    cd SavesBinder
-   git checkout master
    ```
 
 2. Install dependencies:
@@ -132,7 +132,7 @@ If you prefer to compile the application yourself, make sure you have Go install
 5. *(Optional)* Further compress the binary using UPX:
 
    ```shell
-   upx --best --lzma ".\Val's Saves Binder.exe"
+   upx --best --lzma ".\Saves Binder.exe"
    ```
 
 ---
