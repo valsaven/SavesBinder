@@ -81,11 +81,65 @@ type displayPair struct {
 	LinkStatus   string
 }
 
+// HoverLabel is a single-line label that shows the full text in a tooltip on hover.
+// Used for long paths so list rows stay fixed-height while remaining readable.
+type HoverLabel struct {
+	widget.Label
+	fullText   string
+	canvas     fyne.Canvas
+	popup      *widget.PopUp
+	hovered    bool
+	currentPos fyne.Position
+}
+
+func NewHoverLabel(canvas fyne.Canvas) *HoverLabel {
+	l := &HoverLabel{canvas: canvas}
+	l.Wrapping = fyne.TextWrapOff
+	l.Truncation = fyne.TextTruncateEllipsis
+	l.ExtendBaseWidget(l)
+	return l
+}
+
+// SetFullText updates both the truncated display text and the hover tooltip content.
+func (l *HoverLabel) SetFullText(text string) {
+	l.fullText = text
+	l.SetText(text)
+}
+
+func (l *HoverLabel) MouseIn(e *desktop.MouseEvent) {
+	l.hovered = true
+	l.currentPos = e.AbsolutePosition
+	if l.fullText == "" || l.canvas == nil {
+		return
+	}
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		if l.hovered && l.popup == nil && l.fullText != "" && l.canvas != nil {
+			lbl := widget.NewLabel(l.fullText)
+			safePos := fyne.NewPos(l.currentPos.X+16, l.currentPos.Y+16)
+			l.popup = widget.NewPopUp(lbl, l.canvas)
+			l.popup.ShowAtPosition(safePos)
+		}
+	}()
+}
+
+func (l *HoverLabel) MouseOut() {
+	l.hovered = false
+	if l.popup != nil {
+		l.popup.Hide()
+		l.popup = nil
+	}
+}
+
+func (l *HoverLabel) MouseMoved(e *desktop.MouseEvent) {
+	l.currentPos = e.AbsolutePosition
+}
+
 // pairRow is a reusable virtualized list row for a bound save pair
 type pairRow struct {
 	widget.BaseWidget
-	sourceLabel *widget.Label
-	targetLabel *widget.Label
+	sourceLabel *HoverLabel
+	targetLabel *HoverLabel
 	btnRestore  *HoverButton
 	btnUnbind   *HoverButton
 	btnDestroy  *HoverButton
@@ -95,16 +149,11 @@ type pairRow struct {
 
 func newPairRow(canvas fyne.Canvas) *pairRow {
 	r := &pairRow{
-		sourceLabel: widget.NewLabel(""),
-		targetLabel: widget.NewLabel(""),
+		sourceLabel: NewHoverLabel(canvas),
+		targetLabel: NewHoverLabel(canvas),
 		leftPad:     widget.NewLabel("  "),
 		rightPad:    widget.NewLabel("  "),
 	}
-
-	// Single-line labels keep list row height fixed (required for widget.List pooling).
-	// Full-path wrapping is intentionally avoided so virtualization stays cheap.
-	r.sourceLabel.Wrapping = fyne.TextWrapOff
-	r.targetLabel.Wrapping = fyne.TextWrapOff
 
 	r.btnRestore = NewHoverButton(T("btn_restore"), theme.HistoryIcon(), T("hint_restore"), canvas, nil)
 	r.btnRestore.Importance = widget.HighImportance
@@ -126,8 +175,8 @@ func (r *pairRow) CreateRenderer() fyne.WidgetRenderer {
 }
 
 func (r *pairRow) bind(p displayPair, a *SavesBinderApp) {
-	r.sourceLabel.SetText(fmt.Sprintf("source: \"%s\"%s", p.Pair.Target, p.TargetStatus))
-	r.targetLabel.SetText(fmt.Sprintf("target: \"%s\"%s", p.Pair.Link, p.LinkStatus))
+	r.sourceLabel.SetFullText(fmt.Sprintf("source: \"%s\"%s", p.Pair.Target, p.TargetStatus))
+	r.targetLabel.SetFullText(fmt.Sprintf("target: \"%s\"%s", p.Pair.Link, p.LinkStatus))
 
 	pair := p.Pair
 	r.btnRestore.OnTapped = func() {
