@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Create junctions via Win32 reparse API instead of `cmd /c mklink /J`.
 - Progress dialogs for long operations; localized success dialog title; better Windows language detection.
 
+### Dependencies
+
+- Upgrade Fyne `v2.7.4` → `v2.8.0` (and related transitive UI deps).
+- Bump `golang.org/x/sys` and other `golang.org/x/*` modules used by the app.
+
 ## [1.1.0] - 2025-05-29
 
 ### Added
