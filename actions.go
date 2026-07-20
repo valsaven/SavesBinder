@@ -228,6 +228,30 @@ func (a *SavesBinderApp) bindSave() {
 
 	newDir := filepath.Join(storageDir, gameName)
 
+	// Guard: storage and original path must not nest
+	if isNestedPath(storageDir, originalAbs) {
+		dialog.ShowError(fmt.Errorf(T("err_nested_paths")), a.window)
+		return
+	}
+
+	// Guard: original must not already be a junction/symlink
+	if reparse, err := isReparsePoint(originalAbs); err == nil && reparse {
+		dialog.ShowError(fmt.Errorf(T("err_already_reparse"), originalAbs), a.window)
+		return
+	}
+
+	// Guard: path already tracked in DB
+	for _, existing := range a.db.Links {
+		if strings.EqualFold(filepath.Clean(existing.Link), filepath.Clean(originalAbs)) {
+			dialog.ShowError(fmt.Errorf(T("err_already_bound")), a.window)
+			return
+		}
+		if strings.EqualFold(filepath.Clean(existing.Target), filepath.Clean(newDir)) {
+			dialog.ShowError(fmt.Errorf(T("err_name_collision"), newDir), a.window)
+			return
+		}
+	}
+
 	if _, err := os.Stat(newDir); !os.IsNotExist(err) {
 		dialog.ShowError(fmt.Errorf(T("err_already_exists"), newDir), a.window)
 		return

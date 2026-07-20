@@ -6,8 +6,40 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
+
+// isReparsePoint reports whether path is a Windows junction/symlink (reparse point).
+func isReparsePoint(path string) (bool, error) {
+	const fileAttributeReparsePoint = 0x400
+
+	p, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return false, err
+	}
+	attrs, err := syscall.GetFileAttributes(p)
+	if err != nil {
+		return false, err
+	}
+	return attrs&fileAttributeReparsePoint != 0, nil
+}
+
+// isNestedPath reports whether a and b refer to the same path or one contains the other.
+func isNestedPath(a, b string) bool {
+	aAbs, errA := filepath.Abs(a)
+	bAbs, errB := filepath.Abs(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	aClean := strings.ToLower(filepath.Clean(aAbs))
+	bClean := strings.ToLower(filepath.Clean(bAbs))
+	if aClean == bClean {
+		return true
+	}
+	sep := string(os.PathSeparator)
+	return strings.HasPrefix(aClean+sep, bClean+sep) || strings.HasPrefix(bClean+sep, aClean+sep)
+}
 
 // Helper function to move directory contents
 func moveDirContents(src, dst string) error {
