@@ -14,66 +14,140 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// tipMaxWidthLayout forces a single child (usually a wrapped Label) to stay within max width.
-type tipMaxWidthLayout struct {
-	max float32
+// wrapTextToWidth inserts newlines so text fits within maxW (using fyne.MeasureText).
+// Prefers breaking at spaces; falls back to character wrap for long paths.
+func wrapTextToWidth(text string, maxW, textSize float32, style fyne.TextStyle) string {
+	if maxW < 40 {
+		maxW = 40
+	}
+	if text == "" || fyne.MeasureText(text, textSize, style).Width <= maxW {
+		return text
+	}
+
+	fits := func(s string) bool {
+		return fyne.MeasureText(s, textSize, style).Width <= maxW
+	}
+
+	var lines []string
+	var line []rune
+
+	emit := func(s string) {
+		if s != "" {
+			lines = append(lines, s)
+		}
+	}
+
+	for _, r := range text {
+		if r == '\n' {
+			emit(string(line))
+			line = nil
+			continue
+		}
+
+		trial := string(append(append([]rune{}, line...), r))
+		if fits(trial) {
+			line = append(line, r)
+			continue
+		}
+
+		// Current line full — try soft wrap at last space
+		if sp := lastSpaceIndex(line); sp >= 0 {
+			emit(string(line[:sp]))
+			line = append(append([]rune{}, line[sp+1:]...), r)
+		} else if len(line) > 0 {
+			emit(string(line))
+			line = []rune{r}
+		} else {
+			// Single rune wider than maxW — still emit so we make progress
+			emit(string(r))
+			line = nil
+			continue
+		}
+
+		// Soft-wrap rest may still exceed maxW (long token); hard-split it
+		for len(line) > 0 && !fits(string(line)) {
+			if len(line) == 1 {
+				emit(string(line))
+				line = nil
+				break
+			}
+			// Largest prefix that fits
+			fit := 1
+			for fit < len(line) && fits(string(line[:fit+1])) {
+				fit++
+			}
+			emit(string(line[:fit]))
+			line = line[fit:]
+		}
+	}
+	emit(string(line))
+
+	if len(lines) == 0 {
+		return text
+	}
+	return strings.Join(lines, "\n")
 }
 
-func (t *tipMaxWidthLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	if len(objects) == 0 {
-		return fyne.NewSize(0, 0)
+func lastSpaceIndex(runes []rune) int {
+	for i := len(runes) - 1; i >= 0; i-- {
+		if runes[i] == ' ' || runes[i] == '\t' {
+			return i
+		}
 	}
-	child := objects[0]
-	// Give the child our max width so word-wrap MinSize returns a usable height.
-	child.Resize(fyne.NewSize(t.max, 10000))
-	s := child.MinSize()
-	w := s.Width
-	if w > t.max {
-		w = t.max
-	}
-	if w < 1 {
-		w = t.max
-	}
-	child.Resize(fyne.NewSize(w, 10000))
-	s = child.MinSize()
-	h := s.Height
-	if s.Width > 0 && s.Width < w {
-		w = s.Width
-	}
-	return fyne.NewSize(w, h)
-}
-
-func (t *tipMaxWidthLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	for _, o := range objects {
-		o.Resize(size)
-		o.Move(fyne.NewPos(0, 0))
-	}
+	return -1
 }
 
 // showHoverTooltip shows text near anchor, fully inside the canvas (flips when near edges).
+// Sizing is based on fyne.MeasureText + explicit newlines — not Label WordWrap MinSize,
+// which is unreliable before the widget is laid out in a parent of known width.
 func showHoverTooltip(canvas fyne.Canvas, text string, anchor fyne.Position) *widget.PopUp {
 	if canvas == nil || text == "" {
 		return nil
 	}
 
 	const edgePad float32 = 8
-	const tipOffset float32 = 14
+	const tipOffset float32 = 12
 
 	canvasSize := canvas.Size()
-	maxTextW := canvasSize.Width - edgePad*2
-	if maxTextW > 340 {
-		maxTextW = 340
-	}
-	if maxTextW < 180 {
-		maxTextW = 180
+	if canvasSize.Width < 1 || canvasSize.Height < 1 {
+		// Fallback if canvas not laid out yet
+		lbl := widget.NewLabel(text)
+		popup := widget.NewPopUp(lbl, canvas)
+		popup.ShowAtPosition(anchor)
+		return popup
 	}
 
-	lbl := widget.NewLabel(text)
-	lbl.Wrapping = fyne.TextWrapWord
-	content := container.New(&tipMaxWidthLayout{max: maxTextW}, lbl)
+	th := fyne.CurrentApp().Settings().Theme()
+	textSize := th.Size(theme.SizeNameText)
+	style := fyne.TextStyle{}
+	// Leave room for PopUp chrome / padding around the label
+	innerPad := th.Size(theme.SizeNameInnerPadding) * 2
 
-	popup := widget.NewPopUp(content, canvas)
+	maxContentW := canvasSize.Width - edgePad*2 - innerPad
+	if maxContentW > 360 {
+		maxContentW = 360
+	}
+	if maxContentW < 120 {
+		maxContentW = 120
+	}
+
+	wrapped := wrapTextToWidth(text, maxContentW, textSize, style)
+	lbl := widget.NewLabel(wrapped)
+	// Explicit newlines already encode wrapping; keep wrap off so MinSize is stable.
+	lbl.Wrapping = fyne.TextWrapOff
+
+	popup := widget.NewPopUp(lbl, canvas)
 	size := popup.MinSize()
+
+	// Cap to canvas (safety net)
+	maxPopW := canvasSize.Width - edgePad*2
+	maxPopH := canvasSize.Height - edgePad*2
+	if size.Width > maxPopW {
+		size.Width = maxPopW
+	}
+	if size.Height > maxPopH {
+		size.Height = maxPopH
+	}
 
 	// Prefer below-right of the cursor; flip when that would leave the window.
 	x := anchor.X + tipOffset
@@ -106,7 +180,11 @@ func showHoverTooltip(canvas fyne.Canvas, text string, anchor fyne.Position) *wi
 		}
 	}
 
+	popup.Resize(size)
 	popup.ShowAtPosition(fyne.NewPos(x, y))
+	// Re-assert size after Show (overlay layout can reset to a broken MinSize).
+	popup.Resize(size)
+	popup.Move(fyne.NewPos(x, y))
 	return popup
 }
 
