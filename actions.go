@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
@@ -293,11 +291,8 @@ func (a *SavesBinderApp) bindSave() {
 				return err
 			}
 
-			cmd := exec.Command("cmd", "/c", "mklink", "/J", originalAbs, newDir)
-			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("mklink_error: %w", err)
+			if err := createJunction(originalAbs, newDir); err != nil {
+				return fmt.Errorf("junction_error: %w", err)
 			}
 
 			return nil
@@ -305,7 +300,7 @@ func (a *SavesBinderApp) bindSave() {
 
 		if errProcess != nil {
 			// Best-effort rollback of partial moves (still off UI thread)
-			if strings.Contains(errProcess.Error(), "mklink_error") {
+			if strings.Contains(errProcess.Error(), "junction_error") {
 				_ = os.RemoveAll(newDir)
 			} else if _, err := os.Stat(newDir); !os.IsNotExist(err) {
 				_ = os.MkdirAll(originalAbs, os.ModePerm)
@@ -315,7 +310,7 @@ func (a *SavesBinderApp) bindSave() {
 
 			fyne.Do(func() {
 				prog.Hide()
-				if strings.Contains(errProcess.Error(), "mklink_error") {
+				if strings.Contains(errProcess.Error(), "junction_error") {
 					dialog.ShowError(fmt.Errorf(T("err_junction")), a.window)
 				} else {
 					dialog.ShowError(fmt.Errorf(T("err_bind_failed"), errProcess), a.window)

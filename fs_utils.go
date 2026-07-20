@@ -127,20 +127,24 @@ func copyFileOrDir(src, dst string) error {
 	return nil
 }
 
-// restoreOne executes mklink to restore a broken junction or hardlink
+// restoreOne recreates a broken junction (Win32 reparse point) or hardlink
 func (a *SavesBinderApp) restoreOne(p LinkPair) (bool, string) {
-	var cmd *exec.Cmd
-	if p.Type == "hardlink" {
-		cmd = exec.Command("cmd", "/c", "mklink", "/H", p.Link, p.Target)
-	} else if p.Type == "junction" {
-		cmd = exec.Command("cmd", "/c", "mklink", "/J", p.Link, p.Target)
-	} else {
+	switch p.Type {
+	case "junction", "":
+		// Default historical type is junction
+		if err := createJunction(p.Link, p.Target); err != nil {
+			return false, err.Error()
+		}
+		return true, ""
+	case "hardlink":
+		// File hardlinks still go through mklink (rare legacy entries)
+		cmd := exec.Command("cmd", "/c", "mklink", "/H", p.Link, p.Target)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		if err := cmd.Run(); err != nil {
+			return false, err.Error()
+		}
+		return true, ""
+	default:
 		return false, T("unknown_type")
 	}
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	if err := cmd.Run(); err != nil {
-		return false, err.Error()
-	}
-	return true, ""
 }
