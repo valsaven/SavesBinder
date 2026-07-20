@@ -42,8 +42,8 @@ With **SavesBinder**, you can finally gather all your saves into one clean, cent
 1. You set a main **Storage folder** (e.g., `D:\GameSaves`).
 2. Select the current folder where a game keeps its saves.
 3. The program:
-   * Moves the saves to `D:\GameSaves\GAME_NAME`.
-   * Creates an **NTFS Junction** at the original path pointing to the new location.
+   - Moves the saves to `D:\GameSaves\GAME_NAME`.
+   - Creates an **NTFS Junction** at the original path pointing to the new location.
 4. The game continues to work seamlessly, unaware of the relocation, while your files are safely centralized.
 
 ---
@@ -61,9 +61,9 @@ With **SavesBinder**, you can finally gather all your saves into one clean, cent
 
 ## Important Notes
 
-* This tool relies on **Junctions** (`mklink /J`), which require an **NTFS** file system (the standard for Windows drives).
-* While the file transfer process is fully safe, it is always recommended to make a manual backup the first time you try it on a new game.
-* **Do not delete junction folders manually** via File Explorer - always use the **Unbind** or **Restore** buttons inside the application to manage them safely.
+- This tool relies on **Junctions** (`mklink /J`), which require an **NTFS** file system (the standard for Windows drives).
+- While the file transfer process is fully safe, it is always recommended to make a manual backup the first time you try it on a new game.
+- **Do not delete junction folders manually** via File Explorer - always use the **Unbind** or **Restore** buttons inside the application to manage them safely.
 
 ---
 
@@ -75,8 +75,8 @@ With **SavesBinder**, you can finally gather all your saves into one clean, cent
 
 ## Requirements
 
-* **Windows 10 / 11**
-* NTFS-formatted storage drives
+- **Windows 10 / 11**
+- NTFS-formatted storage drives
 
 ---
 
@@ -91,35 +91,46 @@ Go to the [Releases](https://github.com/valsaven/SavesBinder/releases) page, dow
 If you prefer to compile the application yourself, make sure you have Go installed:
 
 1. Clone the repository:
+
    ```shell
    git clone git@github.com:valsaven/SavesBinder.git
    cd SavesBinder
    git checkout master
    ```
+
 2. Install dependencies:
+
    ```shell
    go install fyne.io/tools/cmd/fyne@latest
    go install github.com/akavel/rsrc@latest
 
    go mod tidy
    ```
+
 3. Generate icons and Windows resources:
+
    ```shell
    # Embeds PNG icon for the Fyne app window
    fyne bundle -o bundled.go Icon.png
-   
+
    # Generates Windows PE resource for the .exe file icon
    rsrc -ico floppy-icon.ico -o rsrc.syso
    ```
+
 4. Compile the production build (hides the background console window and optimizes file size):
+
    ```shell
    go build -ldflags="-s -w -H=windowsgui" -o SavesBinder.exe .
    ```
+
    or via Fyne package:
+
    ```shell
    fyne package -release -os windows
    ```
+
 5. *(Optional)* Further compress the binary using UPX:
+
    ```shell
    upx --best --lzma ".\Val's Saves Binder.exe"
    ```
