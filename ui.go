@@ -74,14 +74,82 @@ func (h *HoverButton) MouseMoved(e *desktop.MouseEvent) {
 	h.currentPos = e.AbsolutePosition // Constantly update position while moving
 }
 
-// refreshList rebuilds the UI list and checks the status of paths
-func (a *SavesBinderApp) refreshList() {
-	a.listContainer.Objects = nil
+// displayPair is one filtered list entry with path health labels
+type displayPair struct {
+	Pair         LinkPair
+	TargetStatus string
+	LinkStatus   string
+}
 
+// pairRow is a reusable virtualized list row for a bound save pair
+type pairRow struct {
+	widget.BaseWidget
+	sourceLabel *widget.Label
+	targetLabel *widget.Label
+	btnRestore  *HoverButton
+	btnUnbind   *HoverButton
+	btnDestroy  *HoverButton
+	leftPad     *widget.Label
+	rightPad    *widget.Label
+}
+
+func newPairRow(canvas fyne.Canvas) *pairRow {
+	r := &pairRow{
+		sourceLabel: widget.NewLabel(""),
+		targetLabel: widget.NewLabel(""),
+		leftPad:     widget.NewLabel("  "),
+		rightPad:    widget.NewLabel("  "),
+	}
+
+	// Single-line labels keep list row height fixed (required for widget.List pooling).
+	// Full-path wrapping is intentionally avoided so virtualization stays cheap.
+	r.sourceLabel.Wrapping = fyne.TextWrapOff
+	r.targetLabel.Wrapping = fyne.TextWrapOff
+
+	r.btnRestore = NewHoverButton(T("btn_restore"), theme.HistoryIcon(), T("hint_restore"), canvas, nil)
+	r.btnRestore.Importance = widget.HighImportance
+
+	r.btnUnbind = NewHoverButton(T("btn_unbind"), theme.ContentRemoveIcon(), T("hint_unbind"), canvas, nil)
+
+	r.btnDestroy = NewHoverButton(T("btn_destroy"), theme.DeleteIcon(), T("hint_destroy"), canvas, nil)
+	r.btnDestroy.Importance = widget.DangerImportance
+
+	r.ExtendBaseWidget(r)
+	return r
+}
+
+func (r *pairRow) CreateRenderer() fyne.WidgetRenderer {
+	pathBlock := container.NewVBox(r.sourceLabel, r.targetLabel)
+	actionGroup := container.NewHBox(r.btnRestore, r.btnUnbind, r.btnDestroy, r.rightPad)
+	row := container.NewBorder(nil, nil, r.leftPad, actionGroup, pathBlock)
+	return widget.NewSimpleRenderer(row)
+}
+
+func (r *pairRow) bind(p displayPair, a *SavesBinderApp) {
+	r.sourceLabel.SetText(fmt.Sprintf("source: \"%s\"%s", p.Pair.Target, p.TargetStatus))
+	r.targetLabel.SetText(fmt.Sprintf("target: \"%s\"%s", p.Pair.Link, p.LinkStatus))
+
+	pair := p.Pair
+	r.btnRestore.OnTapped = func() {
+		a.restoreSave(pair)
+	}
+	r.btnUnbind.OnTapped = func() {
+		a.unbindSave(pair)
+	}
+	r.btnDestroy.OnTapped = func() {
+		a.destroySave(pair)
+	}
+}
+
+// refreshList rebuilds the filtered view and refreshes the virtualized list
+func (a *SavesBinderApp) refreshList() {
 	filter := ""
 	if a.searchEntry != nil {
 		filter = strings.ToLower(strings.TrimSpace(a.searchEntry.Text))
 	}
+
+	// Reuse backing array to avoid reallocating on every refresh
+	a.filteredPairs = a.filteredPairs[:0]
 
 	for _, pair := range a.db.Links {
 		if filter != "" {
@@ -93,62 +161,23 @@ func (a *SavesBinderApp) refreshList() {
 			}
 		}
 
-		p := pair // Capture variable for closure
+		_, errTarget := os.Stat(pair.Target)
+		_, errLink := os.Stat(pair.Link)
 
-		_, errTarget := os.Stat(p.Target)
-		_, errLink := os.Stat(p.Link)
-
-		targetStatus := ""
-		linkStatus := ""
+		dp := displayPair{Pair: pair}
 		if os.IsNotExist(errTarget) {
-			targetStatus = T("orig_deleted")
+			dp.TargetStatus = T("orig_deleted")
 		}
 		if os.IsNotExist(errLink) {
-			linkStatus = T("link_broken")
+			dp.LinkStatus = T("link_broken")
 		}
 
-		// Create two path strings
-		sourceLabel := widget.NewLabel(fmt.Sprintf("source: \"%s\"%s", p.Target, targetStatus))
-		targetLabel := widget.NewLabel(fmt.Sprintf("target: \"%s\"%s", p.Link, linkStatus))
-
-		// Enable automatic line breaks to prevent long paths from breaking the layout
-		sourceLabel.Wrapping = fyne.TextWrapBreak
-		targetLabel.Wrapping = fyne.TextWrapBreak
-
-		// Make the source text slightly dimmer or leave it as is,
-		// but combine them into a vertical block
-		pathBlock := container.NewVBox(sourceLabel, targetLabel)
-
-		// Create symmetrical padding from spaces
-		leftPadding := widget.NewLabel("  ")
-		rightPadding := widget.NewLabel("  ")
-
-		// Create the 3 action buttons using our custom HoverButton
-		btnRestore := NewHoverButton(T("btn_restore"), theme.HistoryIcon(), T("hint_restore"), a.window.Canvas(), func() {
-			a.restoreSave(p)
-		})
-		btnRestore.Importance = widget.HighImportance // Blue/Primary color
-
-		btnUnbind := NewHoverButton(T("btn_unbind"), theme.ContentRemoveIcon(), T("hint_unbind"), a.window.Canvas(), func() {
-			a.unbindSave(p)
-		})
-		// Default importance (neutral)
-
-		btnDestroy := NewHoverButton(T("btn_destroy"), theme.DeleteIcon(), T("hint_destroy"), a.window.Canvas(), func() {
-			a.destroySave(p)
-		})
-		btnDestroy.Importance = widget.DangerImportance // Red color
-
-		// Combine buttons into a horizontal group AND add rightPadding to fix the scrollbar overlap
-		actionGroup := container.NewHBox(btnRestore, btnUnbind, btnDestroy, rightPadding)
-
-		// Assemble the row: padding on the left, paths in center, buttons + padding on the right
-		row := container.NewBorder(nil, nil, leftPadding, actionGroup, pathBlock)
-
-		a.listContainer.Add(container.NewVBox(row, widget.NewSeparator()))
+		a.filteredPairs = append(a.filteredPairs, dp)
 	}
 
-	a.listContainer.Refresh()
+	if a.pairList != nil {
+		a.pairList.Refresh()
+	}
 }
 
 // buildUI constructs the interface and populates data bindings
@@ -275,12 +304,25 @@ func (a *SavesBinderApp) buildUI() fyne.CanvasObject {
 
 	bottomFrame := container.NewVBox(widget.NewSeparator(), form, actions)
 
-	// List container for link pairs
-	a.listContainer = container.NewVBox()
-	scrollContainer := container.NewScroll(a.listContainer)
+	// Virtualized list: only visible rows are rendered/updated
+	a.pairList = widget.NewList(
+		func() int {
+			return len(a.filteredPairs)
+		},
+		func() fyne.CanvasObject {
+			return newPairRow(a.window.Canvas())
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			row, ok := obj.(*pairRow)
+			if !ok || id < 0 || id >= len(a.filteredPairs) {
+				return
+			}
+			row.bind(a.filteredPairs[id], a)
+		},
+	)
 
 	a.refreshList()
 
 	// Form (with all inputs including Search) at the bottom, list above it
-	return container.NewBorder(nil, bottomFrame, nil, nil, scrollContainer)
+	return container.NewBorder(nil, bottomFrame, nil, nil, a.pairList)
 }

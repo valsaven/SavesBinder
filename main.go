@@ -14,9 +14,10 @@ type SavesBinderApp struct {
 	storageEntry  *widget.Entry
 	toBindEntry   *widget.Entry
 	confirmCheck  *widget.Check
-	listContainer *fyne.Container
+	pairList      *widget.List
 	searchEntry   *widget.Entry
 	db            AppDatabase
+	filteredPairs []displayPair
 }
 
 func main() {
