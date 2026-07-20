@@ -64,6 +64,7 @@ func (a *SavesBinderApp) removeFromDB(p LinkPair) {
 	}
 	a.db.Links = newLinks
 	a.saveData()
+	a.invalidatePathHealth()
 	a.refreshList()
 }
 
@@ -248,6 +249,7 @@ func (a *SavesBinderApp) bindSave() {
 		Type:   "junction",
 	})
 	a.saveData()
+	a.invalidatePathHealth()
 	a.refreshList()
 
 	a.toBindEntry.SetText("")

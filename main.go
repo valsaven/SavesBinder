@@ -24,6 +24,19 @@ type SavesBinderApp struct {
 
 	searchMu    sync.Mutex
 	searchTimer *time.Timer
+
+	// pathHealthCache avoids synchronous os.Stat storms on every list refresh.
+	// Keyed by target+"\x00"+link; updated asynchronously.
+	statusMu        sync.RWMutex
+	pathHealthCache map[string]pathHealth
+	statusEpoch     uint64 // bumped to cancel outdated background scans
+}
+
+// pathHealth is the cached existence status of a bound pair's paths.
+type pathHealth struct {
+	TargetMissing bool
+	LinkMissing   bool
+	Checked       bool
 }
 
 func main() {

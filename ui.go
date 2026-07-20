@@ -187,8 +187,19 @@ func (r *pairRow) bind(p displayPair, a *SavesBinderApp) {
 	}
 }
 
-// refreshList rebuilds the filtered view and refreshes the virtualized list
+func pairCacheKey(p LinkPair) string {
+	return p.Target + "\x00" + p.Link
+}
+
+// refreshList rebuilds the filtered view from the in-memory cache (no FS I/O)
+// and kicks off a background status scan when needed.
 func (a *SavesBinderApp) refreshList() {
+	a.refreshListFromCache()
+	a.scheduleStatusScan()
+}
+
+// refreshListFromCache filters pairs and applies cached health labels only.
+func (a *SavesBinderApp) refreshListFromCache() {
 	filter := ""
 	if a.searchEntry != nil {
 		filter = strings.ToLower(strings.TrimSpace(a.searchEntry.Text))
@@ -197,6 +208,8 @@ func (a *SavesBinderApp) refreshList() {
 	// Reuse backing array to avoid reallocating on every refresh
 	a.filteredPairs = a.filteredPairs[:0]
 
+	a.statusMu.RLock()
+	cache := a.pathHealthCache
 	for _, pair := range a.db.Links {
 		if filter != "" {
 			targetLower := strings.ToLower(pair.Target)
@@ -207,23 +220,70 @@ func (a *SavesBinderApp) refreshList() {
 			}
 		}
 
-		_, errTarget := os.Stat(pair.Target)
-		_, errLink := os.Stat(pair.Link)
-
 		dp := displayPair{Pair: pair}
-		if os.IsNotExist(errTarget) {
-			dp.TargetStatus = T("orig_deleted")
+		if h, ok := cache[pairCacheKey(pair)]; ok && h.Checked {
+			if h.TargetMissing {
+				dp.TargetStatus = T("orig_deleted")
+			}
+			if h.LinkMissing {
+				dp.LinkStatus = T("link_broken")
+			}
 		}
-		if os.IsNotExist(errLink) {
-			dp.LinkStatus = T("link_broken")
-		}
-
 		a.filteredPairs = append(a.filteredPairs, dp)
 	}
+	a.statusMu.RUnlock()
 
 	if a.pairList != nil {
 		a.pairList.Refresh()
 	}
+}
+
+// scheduleStatusScan checks path existence off the UI thread and refreshes labels.
+func (a *SavesBinderApp) scheduleStatusScan() {
+	a.statusMu.Lock()
+	if a.pathHealthCache == nil {
+		a.pathHealthCache = make(map[string]pathHealth)
+	}
+	a.statusEpoch++
+	epoch := a.statusEpoch
+	// Snapshot pairs so we don't race with bind/unbind while scanning
+	pairs := make([]LinkPair, len(a.db.Links))
+	copy(pairs, a.db.Links)
+	a.statusMu.Unlock()
+
+	go func(epoch uint64, pairs []LinkPair) {
+		updated := make(map[string]pathHealth, len(pairs))
+		for _, pair := range pairs {
+			_, errTarget := os.Stat(pair.Target)
+			_, errLink := os.Stat(pair.Link)
+			updated[pairCacheKey(pair)] = pathHealth{
+				TargetMissing: os.IsNotExist(errTarget),
+				LinkMissing:   os.IsNotExist(errLink),
+				Checked:       true,
+			}
+		}
+
+		a.statusMu.Lock()
+		// Drop results if a newer scan was scheduled (stale)
+		if epoch != a.statusEpoch {
+			a.statusMu.Unlock()
+			return
+		}
+		a.pathHealthCache = updated
+		a.statusMu.Unlock()
+
+		fyne.Do(func() {
+			a.refreshListFromCache()
+		})
+	}(epoch, pairs)
+}
+
+// invalidatePathHealth clears cached status (e.g. after bind/unbind/restore).
+func (a *SavesBinderApp) invalidatePathHealth() {
+	a.statusMu.Lock()
+	a.pathHealthCache = make(map[string]pathHealth)
+	a.statusEpoch++
+	a.statusMu.Unlock()
 }
 
 // buildUI constructs the interface and populates data bindings
@@ -248,6 +308,7 @@ func (a *SavesBinderApp) buildUI() fyne.CanvasObject {
 
 				// Switch the database on the fly
 				a.loadData()
+				a.invalidatePathHealth()
 				a.refreshList()
 			}
 		}, a.window)
