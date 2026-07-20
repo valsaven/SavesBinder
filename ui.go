@@ -143,16 +143,12 @@ type pairRow struct {
 	btnRestore  *HoverButton
 	btnUnbind   *HoverButton
 	btnDestroy  *HoverButton
-	leftPad     *widget.Label
-	rightPad    *widget.Label
 }
 
 func newPairRow(canvas fyne.Canvas) *pairRow {
 	r := &pairRow{
 		sourceLabel: NewHoverLabel(canvas),
 		targetLabel: NewHoverLabel(canvas),
-		leftPad:     widget.NewLabel("  "),
-		rightPad:    widget.NewLabel("  "),
 	}
 
 	r.btnRestore = NewHoverButton(T("btn_restore"), theme.HistoryIcon(), T("hint_restore"), canvas, nil)
@@ -169,8 +165,9 @@ func newPairRow(canvas fyne.Canvas) *pairRow {
 
 func (r *pairRow) CreateRenderer() fyne.WidgetRenderer {
 	pathBlock := container.NewVBox(r.sourceLabel, r.targetLabel)
-	actionGroup := container.NewHBox(r.btnRestore, r.btnUnbind, r.btnDestroy, r.rightPad)
-	row := container.NewBorder(nil, nil, r.leftPad, actionGroup, pathBlock)
+	actionGroup := container.NewHBox(r.btnRestore, r.btnUnbind, r.btnDestroy)
+	// Theme padding instead of dummy space Labels (cheaper layout, no extra widgets)
+	row := container.NewPadded(container.NewBorder(nil, nil, nil, actionGroup, pathBlock))
 	return widget.NewSimpleRenderer(row)
 }
 
