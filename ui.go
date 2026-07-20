@@ -14,6 +14,102 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// tipMaxWidthLayout forces a single child (usually a wrapped Label) to stay within max width.
+type tipMaxWidthLayout struct {
+	max float32
+}
+
+func (t *tipMaxWidthLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) == 0 {
+		return fyne.NewSize(0, 0)
+	}
+	child := objects[0]
+	// Give the child our max width so word-wrap MinSize returns a usable height.
+	child.Resize(fyne.NewSize(t.max, 10000))
+	s := child.MinSize()
+	w := s.Width
+	if w > t.max {
+		w = t.max
+	}
+	if w < 1 {
+		w = t.max
+	}
+	child.Resize(fyne.NewSize(w, 10000))
+	s = child.MinSize()
+	h := s.Height
+	if s.Width > 0 && s.Width < w {
+		w = s.Width
+	}
+	return fyne.NewSize(w, h)
+}
+
+func (t *tipMaxWidthLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	for _, o := range objects {
+		o.Resize(size)
+		o.Move(fyne.NewPos(0, 0))
+	}
+}
+
+// showHoverTooltip shows text near anchor, fully inside the canvas (flips when near edges).
+func showHoverTooltip(canvas fyne.Canvas, text string, anchor fyne.Position) *widget.PopUp {
+	if canvas == nil || text == "" {
+		return nil
+	}
+
+	const edgePad float32 = 8
+	const tipOffset float32 = 14
+
+	canvasSize := canvas.Size()
+	maxTextW := canvasSize.Width - edgePad*2
+	if maxTextW > 340 {
+		maxTextW = 340
+	}
+	if maxTextW < 180 {
+		maxTextW = 180
+	}
+
+	lbl := widget.NewLabel(text)
+	lbl.Wrapping = fyne.TextWrapWord
+	content := container.New(&tipMaxWidthLayout{max: maxTextW}, lbl)
+
+	popup := widget.NewPopUp(content, canvas)
+	size := popup.MinSize()
+
+	// Prefer below-right of the cursor; flip when that would leave the window.
+	x := anchor.X + tipOffset
+	y := anchor.Y + tipOffset
+
+	if x+size.Width > canvasSize.Width-edgePad {
+		x = anchor.X - size.Width - tipOffset
+	}
+	if y+size.Height > canvasSize.Height-edgePad {
+		y = anchor.Y - size.Height - tipOffset
+	}
+
+	// Hard clamp so the whole popup stays on-canvas (right-side Delete button case).
+	if x < edgePad {
+		x = edgePad
+	}
+	if y < edgePad {
+		y = edgePad
+	}
+	if x+size.Width > canvasSize.Width-edgePad {
+		x = canvasSize.Width - size.Width - edgePad
+		if x < edgePad {
+			x = edgePad
+		}
+	}
+	if y+size.Height > canvasSize.Height-edgePad {
+		y = canvasSize.Height - size.Height - edgePad
+		if y < edgePad {
+			y = edgePad
+		}
+	}
+
+	popup.ShowAtPosition(fyne.NewPos(x, y))
+	return popup
+}
+
 // HoverButton wraps a standard Fyne Button to show a floating tooltip on hover
 type HoverButton struct {
 	widget.Button
@@ -47,10 +143,7 @@ func (h *HoverButton) MouseIn(e *desktop.MouseEvent) {
 			if !h.hovered || h.popup != nil || h.hint == "" || h.canvas == nil {
 				return
 			}
-			lbl := widget.NewLabel(h.hint)
-			safePos := fyne.NewPos(h.currentPos.X+20, h.currentPos.Y+20)
-			h.popup = widget.NewPopUp(lbl, h.canvas)
-			h.popup.ShowAtPosition(safePos)
+			h.popup = showHoverTooltip(h.canvas, h.hint, h.currentPos)
 		})
 	}()
 }
@@ -116,10 +209,7 @@ func (l *HoverLabel) MouseIn(e *desktop.MouseEvent) {
 			if !l.hovered || l.popup != nil || l.fullText == "" || l.canvas == nil {
 				return
 			}
-			lbl := widget.NewLabel(l.fullText)
-			safePos := fyne.NewPos(l.currentPos.X+16, l.currentPos.Y+16)
-			l.popup = widget.NewPopUp(lbl, l.canvas)
-			l.popup.ShowAtPosition(safePos)
+			l.popup = showHoverTooltip(l.canvas, l.fullText, l.currentPos)
 		})
 	}()
 }
