@@ -1,6 +1,9 @@
 package main
 
 import (
+	"sync"
+	"time"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/widget"
@@ -18,6 +21,9 @@ type SavesBinderApp struct {
 	searchEntry   *widget.Entry
 	db            AppDatabase
 	filteredPairs []displayPair
+
+	searchMu    sync.Mutex
+	searchTimer *time.Timer
 }
 
 func main() {

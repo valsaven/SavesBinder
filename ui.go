@@ -322,7 +322,17 @@ func (a *SavesBinderApp) buildUI() fyne.CanvasObject {
 	a.searchEntry = widget.NewEntry()
 	a.searchEntry.SetPlaceHolder(T("search_placeholder"))
 	a.searchEntry.OnChanged = func(string) {
-		a.refreshList()
+		// Debounce: rebuild filtered list only after typing pauses (~200ms)
+		a.searchMu.Lock()
+		if a.searchTimer != nil {
+			a.searchTimer.Stop()
+		}
+		a.searchTimer = time.AfterFunc(200*time.Millisecond, func() {
+			fyne.Do(func() {
+				a.refreshList()
+			})
+		})
+		a.searchMu.Unlock()
 	}
 
 	form := widget.NewForm(
