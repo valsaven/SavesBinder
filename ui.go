@@ -40,20 +40,18 @@ func (h *HoverButton) MouseIn(e *desktop.MouseEvent) {
 	h.hovered = true
 	h.currentPos = e.AbsolutePosition
 
-	// Start a debounce timer in a separate goroutine
+	// Debounce show; UI mutations must run on the Fyne thread
 	go func() {
-		time.Sleep(500 * time.Millisecond) // 500ms delay before showing
-
-		// Check if mouse is still hovering and popup isn't already shown
-		if h.hovered && h.popup == nil && h.hint != "" && h.canvas != nil {
+		time.Sleep(500 * time.Millisecond)
+		fyne.Do(func() {
+			if !h.hovered || h.popup != nil || h.hint == "" || h.canvas == nil {
+				return
+			}
 			lbl := widget.NewLabel(h.hint)
-
-			// Use a safe offset (20px) from the LAST recorded mouse position
 			safePos := fyne.NewPos(h.currentPos.X+20, h.currentPos.Y+20)
-
 			h.popup = widget.NewPopUp(lbl, h.canvas)
 			h.popup.ShowAtPosition(safePos)
-		}
+		})
 	}()
 }
 
@@ -114,12 +112,15 @@ func (l *HoverLabel) MouseIn(e *desktop.MouseEvent) {
 	}
 	go func() {
 		time.Sleep(400 * time.Millisecond)
-		if l.hovered && l.popup == nil && l.fullText != "" && l.canvas != nil {
+		fyne.Do(func() {
+			if !l.hovered || l.popup != nil || l.fullText == "" || l.canvas == nil {
+				return
+			}
 			lbl := widget.NewLabel(l.fullText)
 			safePos := fyne.NewPos(l.currentPos.X+16, l.currentPos.Y+16)
 			l.popup = widget.NewPopUp(lbl, l.canvas)
 			l.popup.ShowAtPosition(safePos)
-		}
+		})
 	}()
 }
 
