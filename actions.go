@@ -46,6 +46,9 @@ func (a *SavesBinderApp) verifyLinks() {
 			return
 		}
 
+		prog := dialog.NewProgressInfinite(T("progress_title"), T("progress_verify"), a.window)
+		prog.Show()
+
 		go func(pairs []LinkPair) {
 			var failed []string
 			for _, p := range pairs {
@@ -56,6 +59,7 @@ func (a *SavesBinderApp) verifyLinks() {
 			}
 
 			fyne.Do(func() {
+				prog.Hide()
 				a.invalidatePathHealth()
 				a.refreshList()
 
@@ -88,6 +92,9 @@ func (a *SavesBinderApp) removeFromDB(p LinkPair) {
 // restoreSave moves files back to original location and removes the database entry
 func (a *SavesBinderApp) restoreSave(p LinkPair) {
 	process := func() {
+		prog := dialog.NewProgressInfinite(T("progress_title"), T("progress_restore"), a.window)
+		prog.Show()
+
 		go func() {
 			var uiErr error
 			var cleanWarn error
@@ -108,6 +115,7 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 			}
 
 			fyne.Do(func() {
+				prog.Hide()
 				if uiErr != nil {
 					dialog.ShowError(uiErr, a.window)
 					return
@@ -165,6 +173,9 @@ func (a *SavesBinderApp) unbindSave(p LinkPair) {
 // destroySave strictly deletes everything: the link, the files in storage, and DB entry
 func (a *SavesBinderApp) destroySave(p LinkPair) {
 	process := func() {
+		prog := dialog.NewProgressInfinite(T("progress_title"), T("progress_destroy"), a.window)
+		prog.Show()
+
 		go func() {
 			_ = os.Remove(p.Link)
 
@@ -173,6 +184,7 @@ func (a *SavesBinderApp) destroySave(p LinkPair) {
 				uiErr = fmt.Errorf(T("err_destroy"), err)
 			}
 			fyne.Do(func() {
+				prog.Hide()
 				if uiErr != nil {
 					dialog.ShowError(uiErr, a.window)
 					return
@@ -262,6 +274,9 @@ func (a *SavesBinderApp) bindSave() {
 		return
 	}
 
+	prog := dialog.NewProgressInfinite(T("progress_title"), T("progress_bind"), a.window)
+	prog.Show()
+
 	// Heavy move + junction creation off the UI thread
 	go func(originalAbs, newDir, gameName string) {
 		errProcess := func() error {
@@ -299,6 +314,7 @@ func (a *SavesBinderApp) bindSave() {
 			}
 
 			fyne.Do(func() {
+				prog.Hide()
 				if strings.Contains(errProcess.Error(), "mklink_error") {
 					dialog.ShowError(fmt.Errorf(T("err_junction")), a.window)
 				} else {
@@ -309,6 +325,7 @@ func (a *SavesBinderApp) bindSave() {
 		}
 
 		fyne.Do(func() {
+			prog.Hide()
 			a.db.Links = append(a.db.Links, LinkPair{
 				Target: newDir,
 				Link:   originalAbs,

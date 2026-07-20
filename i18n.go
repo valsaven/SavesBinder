@@ -65,6 +65,11 @@ func initLang() {
 		"err_name_collision":  "Another bound pair already uses storage folder:\n%s",
 		"success_title":       "Success",
 		"success_bind":        "Game saves \"%s\" are bound to storage",
+		"progress_title":      "Please wait",
+		"progress_bind":       "Binding saves…",
+		"progress_restore":    "Restoring saves…",
+		"progress_destroy":    "Deleting saves…",
+		"progress_verify":     "Restoring broken links…",
 		"verify_title":        "Verification",
 		"verify_ok":           "All links are fine",
 		"verify_found_msg":    "Found %d broken links. Restore all?",
@@ -121,6 +126,11 @@ func initLang() {
 		"err_name_collision":  "Другая привязка уже использует папку в хранилище:\n%s",
 		"success_title":       "Успех",
 		"success_bind":        "Сохранения игры \"%s\" привязаны к хранилищу",
+		"progress_title":      "Подождите",
+		"progress_bind":       "Привязка сохранений…",
+		"progress_restore":    "Восстановление сохранений…",
+		"progress_destroy":    "Удаление сохранений…",
+		"progress_verify":     "Восстановление ссылок…",
 		"verify_title":        "Проверка",
 		"verify_ok":           "Все ссылки в порядке",
 		"verify_found_msg":    "Найдено %d сломанных ссылок. Восстановить все?",
@@ -132,19 +142,24 @@ func initLang() {
 	}
 }
 
-// GetDefaultSystemLang returns ru or en based on system environment
+// GetDefaultSystemLang returns ru or en based on OS locale (Windows-aware).
 func GetDefaultSystemLang() string {
-	sysLang := os.Getenv("LANG")
+	// Prefer real OS locale (works on Windows where LANG/LC_ALL are often empty)
+	if code, err := systemLanguageCode(); err == nil && code != "" {
+		if strings.HasPrefix(strings.ToLower(code), "ru") {
+			return "ru"
+		}
+		return "en"
+	}
 
+	// Fallback for unusual environments
+	sysLang := os.Getenv("LANG")
 	if sysLang == "" {
 		sysLang = os.Getenv("LC_ALL")
 	}
-
-	// Windows fallback detection via light env vars or default to ru if containing RU
 	if strings.Contains(strings.ToLower(sysLang), "ru") {
 		return "ru"
 	}
-
 	return "en"
 }
 
