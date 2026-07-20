@@ -8,21 +8,32 @@ import (
 	"strings"
 	"syscall"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 )
 
 // verifyLinks checks for broken links and prompts for restoration
 func (a *SavesBinderApp) verifyLinks() {
-	a.refreshList()
-
+	// Prefer cached health when available; fall back to a quick scan for pairs
+	// that have not been checked yet.
 	var restorable []LinkPair
+	a.statusMu.RLock()
+	cache := a.pathHealthCache
 	for _, p := range a.db.Links {
+		if h, ok := cache[pairCacheKey(p)]; ok && h.Checked {
+			if !h.TargetMissing && h.LinkMissing {
+				restorable = append(restorable, p)
+			}
+			continue
+		}
+		// Uncached: cheap sync check only for verify action
 		_, errTarget := os.Stat(p.Target)
 		_, errLink := os.Stat(p.Link)
 		if errTarget == nil && os.IsNotExist(errLink) {
 			restorable = append(restorable, p)
 		}
 	}
+	a.statusMu.RUnlock()
 
 	if len(restorable) == 0 {
 		dialog.ShowInformation(T("verify_title"), T("verify_ok"), a.window)
@@ -35,26 +46,32 @@ func (a *SavesBinderApp) verifyLinks() {
 			return
 		}
 
-		var failed []string
-		for _, p := range restorable {
-			success, errStr := a.restoreOne(p)
-			if !success {
-				failed = append(failed, fmt.Sprintf("%s: %s", p.Link, errStr))
+		go func(pairs []LinkPair) {
+			var failed []string
+			for _, p := range pairs {
+				success, errStr := a.restoreOne(p)
+				if !success {
+					failed = append(failed, fmt.Sprintf("%s: %s", p.Link, errStr))
+				}
 			}
-		}
 
-		a.refreshList()
+			fyne.Do(func() {
+				a.invalidatePathHealth()
+				a.refreshList()
 
-		if len(failed) > 0 {
-			errLines := strings.Join(failed, "\n")
-			dialog.ShowError(fmt.Errorf(T("verify_restore_err"), errLines), a.window)
-		} else {
-			dialog.ShowInformation(T("verify_title"), T("verify_ok"), a.window)
-		}
+				if len(failed) > 0 {
+					errLines := strings.Join(failed, "\n")
+					dialog.ShowError(fmt.Errorf(T("verify_restore_err"), errLines), a.window)
+				} else {
+					dialog.ShowInformation(T("verify_title"), T("verify_ok"), a.window)
+				}
+			})
+		}(restorable)
 	}, a.window)
 }
 
-// removeFromDB handles removing the record from JSON and refreshing UI
+// removeFromDB handles removing the record from JSON and refreshing UI.
+// Must be called on the UI thread.
 func (a *SavesBinderApp) removeFromDB(p LinkPair) {
 	var newLinks []LinkPair
 	for _, item := range a.db.Links {
@@ -71,33 +88,36 @@ func (a *SavesBinderApp) removeFromDB(p LinkPair) {
 // restoreSave moves files back to original location and removes the database entry
 func (a *SavesBinderApp) restoreSave(p LinkPair) {
 	process := func() {
-		// 1. Remove junction link safely
-		if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
-			dialog.ShowError(fmt.Errorf(T("err_delete"), err), a.window)
-			return
-		}
+		go func() {
+			var uiErr error
+			var cleanWarn error
 
-		// 2. Move files back if target exists
-		if _, err := os.Stat(p.Target); err == nil {
-			// Check for an error creating the original directory
-			if err := os.MkdirAll(p.Link, os.ModePerm); err != nil {
-				dialog.ShowError(fmt.Errorf(T("err_restore_mkdir"), err), a.window)
-				return
+			// 1. Remove junction link safely
+			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
+				uiErr = fmt.Errorf(T("err_delete"), err)
+			} else if _, err := os.Stat(p.Target); err == nil {
+				// 2. Move files back if target exists
+				if err := os.MkdirAll(p.Link, os.ModePerm); err != nil {
+					uiErr = fmt.Errorf(T("err_restore_mkdir"), err)
+				} else if err := moveDirContents(p.Target, p.Link); err != nil {
+					uiErr = fmt.Errorf(T("err_restore"), err)
+				} else if err := os.RemoveAll(p.Target); err != nil {
+					// Files already restored — still remove DB entry, just warn
+					cleanWarn = fmt.Errorf(T("err_clean_storage"), err)
+				}
 			}
 
-			if err := moveDirContents(p.Target, p.Link); err != nil {
-				dialog.ShowError(fmt.Errorf(T("err_restore"), err), a.window)
-				return
-			}
-
-			// Check for a storage cleanup error (important: we do NOT abort execution via return, as the files have already been successfully transferred to the original! The database still needs to be cleaned up)
-			if err := os.RemoveAll(p.Target); err != nil {
-				dialog.ShowError(fmt.Errorf(T("err_clean_storage"), err), a.window)
-			}
-		}
-
-		// 3. Remove from database only after critical operations are done
-		a.removeFromDB(p)
+			fyne.Do(func() {
+				if uiErr != nil {
+					dialog.ShowError(uiErr, a.window)
+					return
+				}
+				if cleanWarn != nil {
+					dialog.ShowError(cleanWarn, a.window)
+				}
+				a.removeFromDB(p)
+			})
+		}()
 	}
 
 	if a.app.Preferences().BoolWithFallback("confirm_delete", true) {
@@ -115,11 +135,19 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 // unbindSave removes the junction link and DB entry but leaves files in storage
 func (a *SavesBinderApp) unbindSave(p LinkPair) {
 	process := func() {
-		if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
-			dialog.ShowError(fmt.Errorf(T("err_delete"), err), a.window)
-			return
-		}
-		a.removeFromDB(p)
+		go func() {
+			var uiErr error
+			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
+				uiErr = fmt.Errorf(T("err_delete"), err)
+			}
+			fyne.Do(func() {
+				if uiErr != nil {
+					dialog.ShowError(uiErr, a.window)
+					return
+				}
+				a.removeFromDB(p)
+			})
+		}()
 	}
 
 	if a.app.Preferences().BoolWithFallback("confirm_delete", true) {
@@ -137,15 +165,21 @@ func (a *SavesBinderApp) unbindSave(p LinkPair) {
 // destroySave strictly deletes everything: the link, the files in storage, and DB entry
 func (a *SavesBinderApp) destroySave(p LinkPair) {
 	process := func() {
-		// Ignore error if link is already missing
-		_ = os.Remove(p.Link)
+		go func() {
+			_ = os.Remove(p.Link)
 
-		if err := os.RemoveAll(p.Target); err != nil {
-			dialog.ShowError(fmt.Errorf(T("err_destroy"), err), a.window)
-			return
-		}
-
-		a.removeFromDB(p)
+			var uiErr error
+			if err := os.RemoveAll(p.Target); err != nil {
+				uiErr = fmt.Errorf(T("err_destroy"), err)
+			}
+			fyne.Do(func() {
+				if uiErr != nil {
+					dialog.ShowError(uiErr, a.window)
+					return
+				}
+				a.removeFromDB(p)
+			})
+		}()
 	}
 
 	if a.app.Preferences().BoolWithFallback("confirm_delete", true) {
@@ -204,54 +238,64 @@ func (a *SavesBinderApp) bindSave() {
 		return
 	}
 
-	errProcess := func() error {
-		if err := moveDirContents(originalAbs, newDir); err != nil {
-			return err
-		}
+	// Heavy move + junction creation off the UI thread
+	go func(originalAbs, newDir, gameName string) {
+		errProcess := func() error {
+			if err := moveDirContents(originalAbs, newDir); err != nil {
+				return err
+			}
 
-		remFiles, err := os.ReadDir(originalAbs)
-		if err == nil && len(remFiles) > 0 {
-			return fmt.Errorf(T("err_empty_folder"))
-		}
+			remFiles, err := os.ReadDir(originalAbs)
+			if err == nil && len(remFiles) > 0 {
+				return fmt.Errorf(T("err_empty_folder"))
+			}
 
-		if err := os.Remove(originalAbs); err != nil {
-			return err
-		}
+			if err := os.Remove(originalAbs); err != nil {
+				return err
+			}
 
-		cmd := exec.Command("cmd", "/c", "mklink", "/J", originalAbs, newDir)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			cmd := exec.Command("cmd", "/c", "mklink", "/J", originalAbs, newDir)
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("mklink_error: %w", err)
-		}
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("mklink_error: %w", err)
+			}
 
-		return nil
-	}()
+			return nil
+		}()
 
-	if errProcess != nil {
-		if strings.Contains(errProcess.Error(), "mklink_error") {
-			dialog.ShowError(fmt.Errorf(T("err_junction")), a.window)
-			_ = os.RemoveAll(newDir)
-		} else {
-			dialog.ShowError(fmt.Errorf(T("err_bind_failed"), errProcess), a.window)
-			if _, err := os.Stat(newDir); !os.IsNotExist(err) {
+		if errProcess != nil {
+			// Best-effort rollback of partial moves (still off UI thread)
+			if strings.Contains(errProcess.Error(), "mklink_error") {
+				_ = os.RemoveAll(newDir)
+			} else if _, err := os.Stat(newDir); !os.IsNotExist(err) {
 				_ = os.MkdirAll(originalAbs, os.ModePerm)
 				_ = moveDirContents(newDir, originalAbs)
 				_ = os.RemoveAll(newDir)
 			}
+
+			fyne.Do(func() {
+				if strings.Contains(errProcess.Error(), "mklink_error") {
+					dialog.ShowError(fmt.Errorf(T("err_junction")), a.window)
+				} else {
+					dialog.ShowError(fmt.Errorf(T("err_bind_failed"), errProcess), a.window)
+				}
+			})
+			return
 		}
-		return
-	}
 
-	a.db.Links = append(a.db.Links, LinkPair{
-		Target: newDir,
-		Link:   originalAbs,
-		Type:   "junction",
-	})
-	a.saveData()
-	a.invalidatePathHealth()
-	a.refreshList()
+		fyne.Do(func() {
+			a.db.Links = append(a.db.Links, LinkPair{
+				Target: newDir,
+				Link:   originalAbs,
+				Type:   "junction",
+			})
+			a.saveData()
+			a.invalidatePathHealth()
+			a.refreshList()
 
-	a.toBindEntry.SetText("")
-	dialog.ShowInformation("Успех", fmt.Sprintf(T("success_bind"), gameName), a.window)
+			a.toBindEntry.SetText("")
+			dialog.ShowInformation("Успех", fmt.Sprintf(T("success_bind"), gameName), a.window)
+		})
+	}(originalAbs, newDir, gameName)
 }
