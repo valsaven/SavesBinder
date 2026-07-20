@@ -50,7 +50,7 @@ func (a *SavesBinderApp) verifyLinks() {
 		go func(pairs []LinkPair) {
 			var failed []string
 			for _, p := range pairs {
-				success, errStr := a.restoreOne(p)
+				success, errStr := restoreOne(p)
 				if !success {
 					failed = append(failed, fmt.Sprintf("%s: %s", p.Link, errStr))
 				}
@@ -324,7 +324,6 @@ func (a *SavesBinderApp) bindSave() {
 			a.db.Links = append(a.db.Links, LinkPair{
 				Target: newDir,
 				Link:   originalAbs,
-				Type:   "junction",
 			})
 			a.saveData()
 			a.invalidatePathHealth()

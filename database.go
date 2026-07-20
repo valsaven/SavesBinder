@@ -9,11 +9,11 @@ import (
 	"fyne.io/fyne/v2/dialog"
 )
 
-// LinkPair represents a single record in JSON
+// LinkPair is one bound pair: original path (Link) → storage path (Target).
+// Extra JSON fields (e.g. legacy "type") are ignored on load.
 type LinkPair struct {
 	Target string `json:"target"`
 	Link   string `json:"link"`
-	Type   string `json:"type"`
 }
 
 // AppDatabase represents the custom JSON database structure
