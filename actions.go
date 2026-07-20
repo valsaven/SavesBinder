@@ -295,7 +295,7 @@ func (a *SavesBinderApp) bindSave() {
 			a.refreshList()
 
 			a.toBindEntry.SetText("")
-			dialog.ShowInformation("Успех", fmt.Sprintf(T("success_bind"), gameName), a.window)
+			dialog.ShowInformation(T("success_title"), fmt.Sprintf(T("success_bind"), gameName), a.window)
 		})
 	}(originalAbs, newDir, gameName)
 }
