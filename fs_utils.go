@@ -96,8 +96,8 @@ func copyFileOrDir(src, dst string) error {
 	// Defer is kept as a fallback to ensure the descriptor is closed on early exits, but explicit close at the end handles errors
 	defer in.Close()
 
-	// Create destination file for writing
-	out, err := os.Create(dst)
+	// Create destination file for writing — fail if already exists to prevent silent overwrites
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, srcInfo.Mode())
 	if err != nil {
 		return err
 	}
