@@ -72,8 +72,18 @@ func (a *SavesBinderApp) saveData() {
 		return
 	}
 
-	// Check for an error writing the file itself
-	if err := os.WriteFile(dbPath, jsonData, 0644); err != nil {
+	// Write to a temporary file first, then atomically rename it to the target path.
+	// This prevents database corruption if the write is interrupted mid-operation.
+	tmpPath := dbPath + ".tmp"
+	if err := os.WriteFile(tmpPath, jsonData, 0644); err != nil {
+		dialog.ShowError(fmt.Errorf(T("err_db_write"), err), a.window)
+		return
+	}
+
+	// Atomic rename: either the old file remains intact, or the new file fully replaces it
+	if err := os.Rename(tmpPath, dbPath); err != nil {
+		// Clean up the temporary file on rename failure
+		_ = os.Remove(tmpPath)
 		dialog.ShowError(fmt.Errorf(T("err_db_write"), err), a.window)
 	}
 }
