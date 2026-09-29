@@ -101,14 +101,19 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
 				uiErr = fmt.Errorf(T("err_delete"), err)
 			} else if _, err := os.Stat(p.Target); err == nil {
-				// 2. Move files back if target exists
+				// 2. Move files back if target exists — use safe move with backup
+				backupRoot := filepath.Join(filepath.Dir(p.Target), ".backup")
 				if err := os.MkdirAll(p.Link, os.ModePerm); err != nil {
 					uiErr = fmt.Errorf(T("err_restore_mkdir"), err)
-				} else if err := moveDirContents(p.Target, p.Link); err != nil {
+				} else if backupPath, err := moveDirContentsSafe(p.Target, p.Link, backupRoot); err != nil {
 					uiErr = fmt.Errorf(T("err_restore"), err)
-				} else if err := os.RemoveAll(p.Target); err != nil {
-					// Files already restored — still remove DB entry, just warn
-					cleanWarn = fmt.Errorf(T("err_clean_storage"), err)
+				} else {
+					// Clean up backup after successful move
+					_ = os.RemoveAll(backupPath)
+					if err := os.RemoveAll(p.Target); err != nil {
+						// Files already restored — still remove DB entry, just warn
+						cleanWarn = fmt.Errorf(T("err_clean_storage"), err)
+					}
 				}
 			}
 
@@ -277,15 +282,16 @@ func (a *SavesBinderApp) bindSave() {
 
 	// Heavy move + junction creation off the UI thread
 	go func(originalAbs, newDir, gameName string) {
+		backupRoot := filepath.Join(storageDir, ".backup")
+
 		errProcess := func() error {
-			if err := moveDirContents(originalAbs, newDir); err != nil {
+			// Use safe move with backup and integrity verification
+			backupPath, err := moveDirContentsSafe(originalAbs, newDir, backupRoot)
+			if err != nil {
 				return err
 			}
-
-			remFiles, err := os.ReadDir(originalAbs)
-			if err == nil && len(remFiles) > 0 {
-				return fmt.Errorf(T("err_empty_folder"))
-			}
+			// Clean up backup after successful move
+			defer os.RemoveAll(backupPath)
 
 			if err := os.Remove(originalAbs); err != nil {
 				return err

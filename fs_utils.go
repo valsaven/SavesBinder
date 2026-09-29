@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // isReparsePoint reports whether path is a Windows junction/symlink (reparse point).
@@ -132,4 +133,99 @@ func restoreOne(p LinkPair) (bool, string) {
 		return false, err.Error()
 	}
 	return true, ""
+}
+
+// backupDir creates a backup of src directory inside backupRoot with a timestamp suffix.
+// Returns the path to the created backup directory.
+func backupDir(src, backupRoot string) (string, error) {
+	if err := os.MkdirAll(backupRoot, os.ModePerm); err != nil {
+		return "", fmt.Errorf("failed to create backup root: %w", err)
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	baseName := filepath.Base(src)
+	backupPath := filepath.Join(backupRoot, baseName+"_"+timestamp)
+
+	if err := copyFileOrDir(src, backupPath); err != nil {
+		return "", fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	return backupPath, nil
+}
+
+// verifyMoveIntegrity checks that the number of files and total size match between src and dst.
+func verifyMoveIntegrity(src, dst string) error {
+	srcCount, srcSize, err := countFilesAndSize(src)
+	if err != nil {
+		return fmt.Errorf("failed to count source files: %w", err)
+	}
+
+	dstCount, dstSize, err := countFilesAndSize(dst)
+	if err != nil {
+		return fmt.Errorf("failed to count destination files: %w", err)
+	}
+
+	if srcCount != dstCount {
+		return fmt.Errorf("file count mismatch: src=%d, dst=%d", srcCount, dstCount)
+	}
+	if srcSize != dstSize {
+		return fmt.Errorf("size mismatch: src=%d, dst=%d", srcSize, dstSize)
+	}
+
+	return nil
+}
+
+// countFilesAndSize returns the number of files and total size in bytes under root.
+func countFilesAndSize(root string) (int, int64, error) {
+	var count int
+	var size int64
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			count++
+			size += info.Size()
+		}
+		return nil
+	})
+
+	return count, size, err
+}
+
+// moveDirContentsSafe moves directory contents with backup and integrity verification.
+// On failure, it attempts to restore the original state from the backup.
+// Returns the backup path (for cleanup) and any error encountered.
+func moveDirContentsSafe(src, dst, backupRoot string) (string, error) {
+	// 1. Create backup before any modifications
+	backupPath, err := backupDir(src, backupRoot)
+	if err != nil {
+		return "", fmt.Errorf("backup failed: %w", err)
+	}
+
+	// 2. Copy files to destination
+	if err := copyFileOrDir(src, dst); err != nil {
+		_ = os.RemoveAll(backupPath)
+		return "", fmt.Errorf("copy failed: %w", err)
+	}
+
+	// 3. Verify integrity
+	if err := verifyMoveIntegrity(src, dst); err != nil {
+		_ = os.RemoveAll(dst)
+		_ = os.RemoveAll(backupPath)
+		return "", fmt.Errorf("integrity check failed: %w", err)
+	}
+
+	// 4. Remove source files
+	if err := os.RemoveAll(src); err != nil {
+		// Attempt to restore from backup
+		_ = os.MkdirAll(src, os.ModePerm)
+		_ = copyFileOrDir(backupPath, src)
+		_ = os.RemoveAll(dst)
+		_ = os.RemoveAll(backupPath)
+		return "", fmt.Errorf("failed to remove source: %w", err)
+	}
+
+	return backupPath, nil
 }
