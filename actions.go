@@ -115,6 +115,34 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 				return
 			}
 
+			// 0.1. Check that paths are not nested
+			if isNestedPath(p.Link, p.Target) {
+				uiErr = fmt.Errorf(T("err_nested_paths"))
+				fyne.Do(func() {
+					prog.Hide()
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+
+			// 1. Remove junction link safely
+			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
+				uiErr = fmt.Errorf(T("err_invalid_path"), err)
+				fyne.Do(func() {
+					prog.Hide()
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+			if err := validatePath(p.Target); err != nil {
+				uiErr = fmt.Errorf(T("err_invalid_path"), err)
+				fyne.Do(func() {
+					prog.Hide()
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+
 			// 1. Remove junction link safely
 			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
 				uiErr = fmt.Errorf(T("err_delete"), err)
@@ -166,6 +194,32 @@ func (a *SavesBinderApp) unbindSave(p LinkPair) {
 	process := func() {
 		go func() {
 			var uiErr error
+
+			// Validate paths before any operations
+			if err := validatePath(p.Link); err != nil {
+				uiErr = fmt.Errorf(T("err_invalid_path"), err)
+				fyne.Do(func() {
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+			if err := validatePath(p.Target); err != nil {
+				uiErr = fmt.Errorf(T("err_invalid_path"), err)
+				fyne.Do(func() {
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+
+			// Check that paths are not nested
+			if isNestedPath(p.Link, p.Target) {
+				uiErr = fmt.Errorf(T("err_nested_paths"))
+				fyne.Do(func() {
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+
 			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
 				uiErr = fmt.Errorf(T("err_delete"), err)
 			}
