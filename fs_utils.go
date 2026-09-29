@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 // isReparsePoint reports whether path is a Windows junction/symlink (reparse point).
@@ -39,6 +40,80 @@ func isNestedPath(a, b string) bool {
 	}
 	sep := string(os.PathSeparator)
 	return strings.HasPrefix(aClean+sep, bClean+sep) || strings.HasPrefix(bClean+sep, aClean+sep)
+}
+
+// checkDiskSpace verifies that the destination drive has enough free space
+// for the source directory contents.
+func checkDiskSpace(src, dst string) error {
+	_, srcSize, err := countFilesAndSize(src)
+	if err != nil {
+		return fmt.Errorf("failed to calculate source size: %w", err)
+	}
+
+	if srcSize == 0 {
+		return nil // Nothing to copy
+	}
+
+	dstAbs, err := filepath.Abs(dst)
+	if err != nil {
+		return fmt.Errorf("failed to resolve destination path: %w", err)
+	}
+
+	volume := filepath.VolumeName(dstAbs)
+	if volume == "" {
+		return nil // Cannot determine volume, skip check
+	}
+
+	free, err := getDiskFreeSpace(volume)
+	if err != nil {
+		return nil // Cannot determine free space, skip check
+	}
+
+	if free < uint64(srcSize) {
+		return fmt.Errorf("insufficient disk space: need %d bytes, available %d bytes", srcSize, free)
+	}
+
+	return nil
+}
+
+// checkWritePermission verifies that we have write access to the specified path.
+func checkWritePermission(path string) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	// Try to create a temporary file in the directory
+	tmpFile := filepath.Join(abs, ".write_test_"+time.Now().Format("20060102150405")+".tmp")
+	f, err := os.Create(tmpFile)
+	if err != nil {
+		return fmt.Errorf("no write permission: %w", err)
+	}
+	f.Close()
+	os.Remove(tmpFile)
+
+	return nil
+}
+
+// getDiskFreeSpace returns the number of free bytes on the specified volume.
+func getDiskFreeSpace(volume string) (uint64, error) {
+	volumePtr, err := syscall.UTF16PtrFromString(volume + `\`)
+	if err != nil {
+		return 0, err
+	}
+
+	var freeBytesAvailable, totalNumberOfBytes, totalNumberOfFreeBytes uint64
+	r1, _, err := syscall.NewLazyDLL("kernel32.dll").NewProc("GetDiskFreeSpaceExW").Call(
+		uintptr(unsafe.Pointer(volumePtr)),
+		uintptr(unsafe.Pointer(&freeBytesAvailable)),
+		uintptr(unsafe.Pointer(&totalNumberOfBytes)),
+		uintptr(unsafe.Pointer(&totalNumberOfFreeBytes)),
+	)
+	if r1 == 0 {
+		return 0, err
+	}
+
+	return freeBytesAvailable, nil
 }
 
 // validatePath checks that a path is safe to operate on.

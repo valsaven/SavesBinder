@@ -125,6 +125,26 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 				return
 			}
 
+			// 0.2. Check write permission on original path
+			if err := checkWritePermission(p.Link); err != nil {
+				uiErr = fmt.Errorf(T("err_no_write_perm"), err)
+				fyne.Do(func() {
+					prog.Hide()
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+
+			// 0.3. Check disk space
+			if err := checkDiskSpace(p.Target, p.Link); err != nil {
+				uiErr = fmt.Errorf(T("err_no_space"), err)
+				fyne.Do(func() {
+					prog.Hide()
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+
 			// 1. Remove junction link safely
 			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
 				uiErr = fmt.Errorf(T("err_invalid_path"), err)
@@ -307,6 +327,12 @@ func (a *SavesBinderApp) bindSave() {
 		return
 	}
 
+	// Guard: check write permission on storage
+	if err := checkWritePermission(storageDir); err != nil {
+		dialog.ShowError(fmt.Errorf(T("err_no_write_perm"), err), a.window)
+		return
+	}
+
 	fileInfo, err := os.Stat(originalAbs)
 	if err != nil || !fileInfo.IsDir() {
 		dialog.ShowError(fmt.Errorf(T("err_not_folder")), a.window)
@@ -320,6 +346,12 @@ func (a *SavesBinderApp) bindSave() {
 	}
 
 	newDir := filepath.Join(storageDir, gameName)
+
+	// Guard: check disk space
+	if err := checkDiskSpace(originalAbs, newDir); err != nil {
+		dialog.ShowError(fmt.Errorf(T("err_no_space"), err), a.window)
+		return
+	}
 
 	// Guard: storage and original path must not nest
 	if isNestedPath(storageDir, originalAbs) {
