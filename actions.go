@@ -272,10 +272,11 @@ func (a *SavesBinderApp) destroySave(p LinkPair) {
 		prog.Show()
 
 		go func() {
-			_ = os.Remove(p.Link)
-
 			var uiErr error
-			if err := os.RemoveAll(p.Target); err != nil {
+
+			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
+				uiErr = fmt.Errorf(T("err_delete"), err)
+			} else if err := os.RemoveAll(p.Target); err != nil {
 				uiErr = fmt.Errorf(T("err_destroy"), err)
 			}
 			fyne.Do(func() {

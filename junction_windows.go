@@ -9,6 +9,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// cleanupJunction removes the junction directory on rollback, returning any error.
+func cleanupJunction(absLink string) error {
+	if err := os.Remove(absLink); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to clean up junction directory: %w", err)
+	}
+	return nil
+}
+
 // createJunction creates an NTFS directory junction at linkPath pointing to targetPath.
 // linkPath must not exist; targetPath must be an existing directory.
 // Uses FSCTL_SET_REPARSE_POINT (no cmd.exe / mklink).
@@ -36,7 +44,9 @@ func createJunction(linkPath, targetPath string) error {
 
 	linkPtr, err := windows.UTF16PtrFromString(absLink)
 	if err != nil {
-		_ = os.Remove(absLink)
+		if cleanupErr := cleanupJunction(absLink); cleanupErr != nil {
+			return fmt.Errorf("%w (cleanup failed: %v)", err, cleanupErr)
+		}
 		return err
 	}
 
@@ -50,7 +60,9 @@ func createJunction(linkPath, targetPath string) error {
 		0,
 	)
 	if err != nil {
-		_ = os.Remove(absLink)
+		if cleanupErr := cleanupJunction(absLink); cleanupErr != nil {
+			return fmt.Errorf("%w (cleanup failed: %v)", err, cleanupErr)
+		}
 		return err
 	}
 	defer windows.CloseHandle(handle)
@@ -59,12 +71,16 @@ func createJunction(linkPath, targetPath string) error {
 	substituteName := `\??\` + absTarget
 	subUTF16, err := windows.UTF16FromString(substituteName)
 	if err != nil {
-		_ = os.Remove(absLink)
+		if cleanupErr := cleanupJunction(absLink); cleanupErr != nil {
+			return fmt.Errorf("%w (cleanup failed: %v)", err, cleanupErr)
+		}
 		return err
 	}
 	printUTF16, err := windows.UTF16FromString(absTarget)
 	if err != nil {
-		_ = os.Remove(absLink)
+		if cleanupErr := cleanupJunction(absLink); cleanupErr != nil {
+			return fmt.Errorf("%w (cleanup failed: %v)", err, cleanupErr)
+		}
 		return err
 	}
 
@@ -104,7 +120,9 @@ func createJunction(linkPath, targetPath string) error {
 		&bytesReturned,
 		nil,
 	); err != nil {
-		_ = os.Remove(absLink)
+		if cleanupErr := cleanupJunction(absLink); cleanupErr != nil {
+			return fmt.Errorf("%w (cleanup failed: %v)", err, cleanupErr)
+		}
 		return err
 	}
 
