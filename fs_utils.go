@@ -41,6 +41,56 @@ func isNestedPath(a, b string) bool {
 	return strings.HasPrefix(aClean+sep, bClean+sep) || strings.HasPrefix(bClean+sep, aClean+sep)
 }
 
+// validatePath checks that a path is safe to operate on.
+// It rejects system directories, drive roots, and paths containing reparse points.
+func validatePath(path string) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	clean := strings.ToLower(filepath.Clean(abs))
+
+	// Reject drive roots (e.g., "C:\", "D:\")
+	if len(clean) == 3 && clean[1] == ':' && clean[2] == '\\' {
+		return fmt.Errorf("path is a drive root: %s", path)
+	}
+
+	// Reject system directories
+	systemPaths := []string{
+		`c:\windows`,
+		`c:\program files`,
+		`c:\program files (x86)`,
+		`c:\programdata`,
+		`c:\users\all users`,
+		`c:\users\default`,
+		`c:\users\public`,
+		`c:\` + "recycler",
+		`c:\` + "system volume information",
+	}
+	for _, sysPath := range systemPaths {
+		if clean == sysPath || strings.HasPrefix(clean, sysPath+`\`) {
+			return fmt.Errorf("path is a protected system directory: %s", path)
+		}
+	}
+
+	// Reject paths containing reparse points (junctions/symlinks) in the middle
+	// Walk up the path and check each component
+	current := clean
+	for current != "" && current != filepath.VolumeName(current)+`\` {
+		if isReparse, err := isReparsePoint(current); err == nil && isReparse {
+			return fmt.Errorf("path contains a reparse point (junction/symlink): %s", current)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		current = parent
+	}
+
+	return nil
+}
+
 // Helper function to move directory contents
 func moveDirContents(src, dst string) error {
 	files, err := os.ReadDir(src)

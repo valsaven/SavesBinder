@@ -97,6 +97,24 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 			var uiErr error
 			var cleanWarn error
 
+			// 0. Validate paths before any operations
+			if err := validatePath(p.Link); err != nil {
+				uiErr = fmt.Errorf(T("err_invalid_path"), err)
+				fyne.Do(func() {
+					prog.Hide()
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+			if err := validatePath(p.Target); err != nil {
+				uiErr = fmt.Errorf(T("err_invalid_path"), err)
+				fyne.Do(func() {
+					prog.Hide()
+					dialog.ShowError(uiErr, a.window)
+				})
+				return
+			}
+
 			// 1. Remove junction link safely
 			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
 				uiErr = fmt.Errorf(T("err_delete"), err)
@@ -226,6 +244,12 @@ func (a *SavesBinderApp) bindSave() {
 	originalAbs, err := filepath.Abs(originalPath)
 	if err != nil {
 		dialog.ShowError(fmt.Errorf(T("err_path_process"), err), a.window)
+		return
+	}
+
+	// Guard: validate path safety (no system dirs, no reparse points)
+	if err := validatePath(originalAbs); err != nil {
+		dialog.ShowError(fmt.Errorf(T("err_invalid_path"), err), a.window)
 		return
 	}
 
