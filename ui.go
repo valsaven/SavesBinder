@@ -252,6 +252,7 @@ type displayPair struct {
 
 // HoverLabel is a single-line label that shows the full text in a tooltip on hover.
 // Used for long paths so list rows stay fixed-height while remaining readable.
+// Supports text selection and copying via built-in Selectable feature.
 type HoverLabel struct {
 	widget.Label
 	fullText   string
@@ -265,6 +266,7 @@ func NewHoverLabel(canvas fyne.Canvas) *HoverLabel {
 	l := &HoverLabel{canvas: canvas}
 	l.Wrapping = fyne.TextWrapOff
 	l.Truncation = fyne.TextTruncateEllipsis
+	l.Selectable = true // Enable text selection and copying
 	l.ExtendBaseWidget(l)
 	return l
 }
@@ -334,7 +336,8 @@ func newPairRow(canvas fyne.Canvas) *pairRow {
 
 func (r *pairRow) CreateRenderer() fyne.WidgetRenderer {
 	pathBlock := container.NewVBox(r.sourceLabel, r.targetLabel)
-	actionGroup := container.NewHBox(r.btnRestore, r.btnUnbind, r.btnDestroy)
+	// Order: Delete, Unbind, Restore (the most destructive element is furthest from the scroll)
+	actionGroup := container.NewHBox(r.btnDestroy, r.btnUnbind, r.btnRestore)
 	// Theme padding instead of dummy space Labels (cheaper layout, no extra widgets)
 	row := container.NewPadded(container.NewBorder(nil, nil, nil, actionGroup, pathBlock))
 	return widget.NewSimpleRenderer(row)
