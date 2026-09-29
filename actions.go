@@ -97,6 +97,8 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 			var uiErr error
 			var cleanWarn error
 
+			Info("Starting restore operation: %s -> %s", p.Target, p.Link)
+
 			// 0. Validate paths before any operations
 			if err := validatePath(p.Link); err != nil {
 				uiErr = fmt.Errorf(T("err_invalid_path"), err)
@@ -186,12 +188,15 @@ func (a *SavesBinderApp) restoreSave(p LinkPair) {
 			fyne.Do(func() {
 				prog.Hide()
 				if uiErr != nil {
+					Error("Restore operation failed: %v", uiErr)
 					dialog.ShowError(uiErr, a.window)
 					return
 				}
 				if cleanWarn != nil {
+					Warn("Restore completed with warnings: %v", cleanWarn)
 					dialog.ShowError(cleanWarn, a.window)
 				}
+				Info("Restore operation completed successfully: %s -> %s", p.Target, p.Link)
 				a.removeFromDB(p)
 			})
 		}()
@@ -214,6 +219,8 @@ func (a *SavesBinderApp) unbindSave(p LinkPair) {
 	process := func() {
 		go func() {
 			var uiErr error
+
+			Info("Starting unbind operation: link=%s", p.Link)
 
 			// Validate paths before any operations
 			if err := validatePath(p.Link); err != nil {
@@ -245,9 +252,11 @@ func (a *SavesBinderApp) unbindSave(p LinkPair) {
 			}
 			fyne.Do(func() {
 				if uiErr != nil {
+					Error("Unbind operation failed: %v", uiErr)
 					dialog.ShowError(uiErr, a.window)
 					return
 				}
+				Info("Unbind operation completed successfully: link=%s", p.Link)
 				a.removeFromDB(p)
 			})
 		}()
@@ -274,6 +283,8 @@ func (a *SavesBinderApp) destroySave(p LinkPair) {
 		go func() {
 			var uiErr error
 
+			Info("Starting destroy operation: link=%s, target=%s", p.Link, p.Target)
+
 			if err := os.Remove(p.Link); err != nil && !os.IsNotExist(err) {
 				uiErr = fmt.Errorf(T("err_delete"), err)
 			} else if err := os.RemoveAll(p.Target); err != nil {
@@ -282,9 +293,11 @@ func (a *SavesBinderApp) destroySave(p LinkPair) {
 			fyne.Do(func() {
 				prog.Hide()
 				if uiErr != nil {
+					Error("Destroy operation failed: %v", uiErr)
 					dialog.ShowError(uiErr, a.window)
 					return
 				}
+				Info("Destroy operation completed successfully: link=%s, target=%s", p.Link, p.Target)
 				a.removeFromDB(p)
 			})
 		}()
@@ -393,6 +406,7 @@ func (a *SavesBinderApp) bindSave() {
 
 	// Heavy move + junction creation off the UI thread
 	go func(originalAbs, newDir, gameName string) {
+		Info("Starting bind operation: %s -> %s", originalAbs, newDir)
 		backupRoot := filepath.Join(storageDir, ".backup")
 
 		errProcess := func() error {
@@ -416,13 +430,23 @@ func (a *SavesBinderApp) bindSave() {
 		}()
 
 		if errProcess != nil {
+			Error("Bind operation failed: %v", errProcess)
+
 			// Best-effort rollback of partial moves (still off UI thread)
 			if strings.Contains(errProcess.Error(), "junction_error") {
-				_ = os.RemoveAll(newDir)
+				if err := os.RemoveAll(newDir); err != nil {
+					Error("Rollback failed to remove newDir: %v", err)
+				}
 			} else if _, err := os.Stat(newDir); !os.IsNotExist(err) {
-				_ = os.MkdirAll(originalAbs, os.ModePerm)
-				_ = moveDirContents(newDir, originalAbs)
-				_ = os.RemoveAll(newDir)
+				if err := os.MkdirAll(originalAbs, os.ModePerm); err != nil {
+					Error("Rollback failed to recreate original dir: %v", err)
+				}
+				if err := moveDirContents(newDir, originalAbs); err != nil {
+					Error("Rollback failed to move files back: %v", err)
+				}
+				if err := os.RemoveAll(newDir); err != nil {
+					Error("Rollback failed to remove newDir: %v", err)
+				}
 			}
 
 			fyne.Do(func() {
@@ -435,6 +459,8 @@ func (a *SavesBinderApp) bindSave() {
 			})
 			return
 		}
+
+		Info("Bind operation completed successfully: %s -> %s", originalAbs, newDir)
 
 		fyne.Do(func() {
 			prog.Hide()

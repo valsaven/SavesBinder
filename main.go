@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -8,6 +11,15 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/widget"
 )
+
+// getLogPath returns the path to the log file in the user's AppData directory.
+func getLogPath() string {
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		return ""
+	}
+	return filepath.Join(appData, "SavesBinder", "logs", "savesbinder.log")
+}
 
 // SavesBinderApp holds references to UI components and application state
 type SavesBinderApp struct {
@@ -41,6 +53,14 @@ type pathHealth struct {
 
 func main() {
 	initLang()
+
+	// Initialize logging
+	logPath := getLogPath()
+	if err := InitLogger(logPath, nil); err != nil {
+		// Fallback: continue without file logging
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+	}
+	defer CloseLogger()
 
 	myApp := app.NewWithID("com.github.valsaven.savesbinder")
 
