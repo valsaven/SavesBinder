@@ -319,6 +319,26 @@ func countFilesAndSize(root string) (int, int64, error) {
 	return count, size, err
 }
 
+// generateUniqueName generates a unique file/directory name by appending a counter.
+// If "file.txt" exists, returns "file (1).txt", then "file (2).txt", etc.
+func generateUniqueName(path string) string {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return path
+	}
+
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	name := base[:len(base)-len(ext)]
+
+	for i := 1; ; i++ {
+		candidate := filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name, i, ext))
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+}
+
 // moveDirContentsSafe moves directory contents with backup and integrity verification.
 // On failure, it attempts to restore the original state from the backup.
 // Returns the backup path (for cleanup) and any error encountered.
@@ -329,8 +349,8 @@ func moveDirContentsSafe(src, dst, backupRoot string) (string, error) {
 		return "", fmt.Errorf("backup failed: %w", err)
 	}
 
-	// 2. Copy files to destination
-	if err := copyFileOrDir(src, dst); err != nil {
+	// 2. Copy files to destination with conflict resolution
+	if err := copyFileOrDirWithConflicts(src, dst); err != nil {
 		_ = os.RemoveAll(backupPath)
 		return "", fmt.Errorf("copy failed: %w", err)
 	}
@@ -353,4 +373,70 @@ func moveDirContentsSafe(src, dst, backupRoot string) (string, error) {
 	}
 
 	return backupPath, nil
+}
+
+// copyFileOrDirWithConflicts copies files/directories, resolving name conflicts
+// by generating unique names (e.g., "file.txt" -> "file (1).txt").
+func copyFileOrDirWithConflicts(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	// If destination exists, generate a unique name
+	if _, err := os.Stat(dst); err == nil {
+		dst = generateUniqueName(dst)
+		Info("Name conflict resolved: %s -> %s", src, dst)
+	}
+
+	if srcInfo.IsDir() {
+		if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+			return err
+		}
+		files, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		for _, file := range files {
+			if err := copyFileOrDirWithConflicts(filepath.Join(src, file.Name()), filepath.Join(dst, file.Name())); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Open source file for reading
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	// Create destination file for writing
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+
+	// Restore original file mode permissions
+	if err := os.Chmod(dst, srcInfo.Mode()); err != nil {
+		return err
+	}
+
+	// Explicitly close and sync written file to catch flush/disk errors
+	if err := out.Close(); err != nil {
+		return err
+	}
+
+	// Explicitly close input file
+	if err := in.Close(); err != nil {
+		return err
+	}
+
+	return nil
 }
