@@ -1,35 +1,65 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+# Visual Studio and .NET
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
 
-# Test binary, built with `go test -c`
-*.test
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
 
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
+# Generated files
+Generated\ Files/
+*.cache
+*.g.cs
+*.g.i.cs
+*.assemblyinfo.cs
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# MSIX / Windows App SDK packaging
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.appxupload
+AppPackages/
+BundleArtifacts/
+packaging/layout/
+Package.StoreAssociation.xml
+_pkginfo.txt
 
-# Go workspace file
-go.work
-go.work.sum
+# Certificates
+*.pfx
+*.p12
+*.cer
 
-# env file
-.env
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
 
-# Editor/IDE
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+
+# Rider / JetBrains
 .idea/
-.vscode/
+*.sln.iml
 
-fyne_metadata_init.go
-rsrc.syso
+# OS junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="SavesBinder.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:SavesBinder"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Val's Saves Binder">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ROW 0: Saves list -->
+        <ListView Grid.Row="0" x:Name="SavesListView" Padding="16" SelectionMode="None">
+            <!-- Template for each list item -->
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,10" ColumnDefinitions="*, Auto">
+                        <!-- Left side: paths -->
+                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                            <TextBlock Text="{Binding TargetText}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{Binding LinkText}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        </StackPanel>
+
+                        <!-- Right side: action buttons -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <!-- Restore button (blue) -->
+                            <Button Style="{StaticResource AccentButtonStyle}" Padding="16,8" Click="RestoreButton_Click"
+                                    ToolTipService.ToolTip="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=hint_restore}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE777;" FontSize="14" />
+                                    <TextBlock Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=btn_restore}" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Unbind button -->
+                            <Button Style="{StaticResource DefaultButtonStyle}" Padding="12,8" Click="UnbindButton_Click"
+                                    ToolTipService.ToolTip="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=hint_unbind}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="— " />
+                                    <TextBlock Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=btn_unbind}" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Delete button (red) -->
+                            <Button Foreground="White" Padding="16,8" Click="DeleteButton_Click"
+                                    ToolTipService.ToolTip="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=hint_destroy}">
+                                <Button.Resources>
+                                    <Color x:Key="ButtonBackground">#DC3545</Color>
+                                    <Color x:Key="ButtonBackgroundPointerOver">#C82333</Color>
+                                    <Color x:Key="ButtonBackgroundPressed">#BD2130</Color>
+                                </Button.Resources>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE74D;" FontSize="14" Foreground="White" />
+                                    <TextBlock Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=btn_destroy}" Foreground="White" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- ROW 1: Bottom panel -->
+        <Border Grid.Row="1" 
+                Background="{ThemeResource SystemChromeLowColor}" 
+                BorderBrush="{ThemeResource SystemChromeHighColor}" 
+                BorderThickness="0,1,0,0" 
+                Padding="16">
+
+            <StackPanel Spacing="10">
+
+                <!-- InfoBar for errors -->
+                <InfoBar x:Name="ErrorInfoBar" Severity="Error" Title="Ошибка" IsOpen="False" IsClosable="True"/>
+
+                <!-- Grid for aligning labels and inputs -->
+                <Grid RowDefinitions="Auto, Auto, Auto, Auto" ColumnDefinitions="Auto, *">
+
+                    <!-- Row 1: search -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,8" HorizontalAlignment="Right" FontWeight="SemiBold"
+                               Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=lbl_search}"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="SearchTextBox" 
+                             Margin="0,0,0,8" TextChanged="SearchTextBox_TextChanged"
+                             PlaceholderText="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=search_placeholder}"/>
+
+                    <!-- Row 2: database file -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,8" HorizontalAlignment="Right" FontWeight="SemiBold"
+                               Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=lbl_db_file}"/>
+                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*, Auto" Margin="0,0,0,8">
+                        <TextBox x:Name="DbFileTextBox" Grid.Column="0" PlaceholderText="Путь к .json" 
+                                 KeyDown="DbFileTextBox_KeyDown" LostFocus="DbFileTextBox_LostFocus" TextChanged="InputField_TextChanged"/>
+                        <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Click="BrowseDbFile_Click"/>
+                    </Grid>
+
+                    <!-- Row 3: storage -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,8" HorizontalAlignment="Right" FontWeight="SemiBold"
+                               Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=lbl_storage}"/>
+                    <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*, Auto" Margin="0,0,0,8">
+                        <TextBox x:Name="StorageTextBox" Grid.Column="0" PlaceholderText="F:\saves\_Roaming\" 
+                                 KeyDown="FolderTextBox_KeyDown" LostFocus="FolderTextBox_LostFocus" TextChanged="InputField_TextChanged"/>
+                        <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Click="BrowseStorageFolder_Click"/>
+                    </Grid>
+
+                    <!-- Row 4: saves path -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,8" HorizontalAlignment="Right" FontWeight="SemiBold"
+                               Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=lbl_saves_path}"/>
+                    <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*, Auto" Margin="0,0,0,8">
+                        <TextBox x:Name="SavesPathTextBox" Grid.Column="0" PlaceholderText="Example: D:\Documents\American Truck Simulator" 
+                                 KeyDown="FolderTextBox_KeyDown" LostFocus="FolderTextBox_LostFocus" TextChanged="InputField_TextChanged"/>
+                        <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Click="BrowseSavesFolder_Click"/>
+                    </Grid>
+                </Grid>
+
+                <!-- Bottom row: buttons, checkbox and language -->
+                <Grid ColumnDefinitions="Auto, *, Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                        <Button Style="{StaticResource AccentButtonStyle}" Click="BindButton_Click"
+                                Content="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=btn_bind}"/>
+                        <Button Background="Transparent" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" Click="VerifyButton_Click"
+                                Content="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=btn_verify}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="16">
+                        <CheckBox x:Name="ConfirmCheckBox" VerticalAlignment="Center" IsChecked="True"
+                                  Content="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=check_confirm}"/>
+                        <Button x:Name="SettingsButton" VerticalAlignment="Center" Padding="6"
+                                Background="Transparent" BorderThickness="0"
+                                AutomationProperties.Name="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_tooltip}"
+                                ToolTipService.ToolTip="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_tooltip}">
+                            <Image Source="Assets/icon-gear.png" Width="20" Height="20" />
+                            <Button.Flyout>
+                                <Flyout Placement="TopEdgeAlignedRight" Opened="SettingsFlyout_Opened">
+                                    <StackPanel Width="300" Spacing="12">
+                                        <TextBlock Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_title}"
+                                                   FontSize="18" FontWeight="SemiBold"/>
+
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_language}"/>
+                                            <ComboBox x:Name="LanguageComboBox" HorizontalAlignment="Stretch" SelectedValuePath="Tag"
+                                                      SelectedValue="{Binding Source={StaticResource Loc}, Path=CurrentLang, Mode=TwoWay}">
+                                                <ComboBoxItem Content="Русский" Tag="ru"/>
+                                                <ComboBoxItem Content="English" Tag="en"/>
+                                            </ComboBox>
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_position}"/>
+                                            <ComboBox x:Name="WindowPositionComboBox" HorizontalAlignment="Stretch" SelectedIndex="1">
+                                                <ComboBoxItem Content="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_position_center}"/>
+                                                <ComboBoxItem Content="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_position_previous}"/>
+                                            </ComboBox>
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_size}"/>
+                                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                                <NumberBox x:Name="WindowWidthBox" Minimum="320" SpinButtonPlacementMode="Compact"
+                                                           Header="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_width}"
+                                                           ValueChanged="WindowSizeBox_ValueChanged"/>
+                                                <NumberBox x:Name="WindowHeightBox" Grid.Column="1" Minimum="240" SpinButtonPlacementMode="Compact"
+                                                           Header="{Binding Source={StaticResource Loc}, Path=CurrentLang, Converter={StaticResource T}, ConverterParameter=settings_height}"
+                                                           ValueChanged="WindowSizeBox_ValueChanged"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+            </StackPanel>
+        </Border>
+
+        <!-- Blocks the window and shows progress during file operations -->
+        <Grid x:Name="BusyOverlay" Grid.RowSpan="2" Background="#80000000" Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                <ProgressRing IsActive="True" Width="48" Height="48" Foreground="White" />
+                <TextBlock x:Name="BusyText" Foreground="White" HorizontalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

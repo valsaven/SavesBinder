@@ -1,142 +1,95 @@
 # SavesBinder
 
-[![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue.svg)](https://go.dev/)
-[![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)](https://www.microsoft.com/windows)
+[![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
+[![Windows App SDK](https://img.shields.io/badge/Windows%20App%20SDK-2.5-blue.svg)](https://learn.microsoft.com/windows/apps/windows-app-sdk/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A lightweight Windows GUI tool designed to centralize your game saves using NTFS Junctions (`mklink /J`).
+A lightweight Windows tool to centralize your game saves using NTFS directory junctions.
 
-Move your saves to a single secure directory while keeping the original paths fully functional.
+Move your saves to a single, safe location while keeping the original paths fully functional. Built with C#, WinUI 3 and Windows App SDK.
 
-## Created by gamer for gamers :3
+*Created by a gamer, for gamers :3*
 
-*Especially for those who hate losing save folders after reinstalling Windows or swapping drives.*
+## Why SavesBinder?
 
-**Tired of saves being scattered everywhere?** One game stores saves in `Documents`, another in `Documents\My Games`, a third in `AppData` and a fourth in some weird custom path?! 🤯
+Games scatter save files all over the place: `Documents`, `AppData\Roaming`, `AppData\Local`, custom folders, etc.
 
-With **SavesBinder**, you can finally gather all your saves into one clean, central folder. The tool keeps the original paths working via junctions and allows you to restore them with a single click-even after a clean system reinstallation.
-
----
+**SavesBinder** lets you gather all of them into one clean folder for easy backup. Using NTFS junctions, games keep reading and writing to their original paths without even knowing anything changed.
 
 ## Features
 
-- **Effortless Binding** - Select a game's save folder: it automatically moves to your central storage and leaves a working junction behind.
-- **Centralized Management** - Keep all your precious saves in one dedicated place for easy backups.
-- **Broken Link Detection** - Instantly scan, verify and repair broken junctions with a single click (convenient after reinstalling the system).
-- **Native NTFS Junctions** - Uses native Windows symlinks, ensuring 100% compatibility with games.
-- **Clean Fyne GUI** - Simple, intuitive and modern lightweight interface.
-- **Human-Readable Config** - Links and paths are stored in a simple, portable JSON file.
-- **Safe Operations** - Built-in confirmation dialogs prevent accidental data loss.
-
----
+- **Easy binding** – Move a game's save folder to your central storage and leave a working junction in its place.
+- **Centralized storage** – Keep all your saves in one dedicated directory.
+- **Broken link detection** – Use "Verify & Restore Broken Links" to quickly repair junctions after reinstalling Windows or changing drives.
+- **Native NTFS junctions** – Uses Windows directory junctions (`mklink /J`). No admin rights required.
+- **Portable** – Put the entire app folder anywhere and run `SavesBinder.exe`. Settings are stored in `settings.json` next to it.
+- **Safe by design** – Built-in confirmations, path validation, nesting checks, disk space checks and rollback on failure.
+- **Bilingual UI** – Russian and English.
+- **Clean WinUI 3 interface** – Modern, minimal and easy to use.
 
 ## How It Works
 
 ```text
-[Original Path] (e.g., AppData\Game) ──(Moves Files)──> [Central Storage] (e.g., D:\GameSaves\Game)
-       │                                                               ▲
-       └───────────────────(Creates NTFS Junction)─────────────────────┘
-
+[Original Path] (e.g. %APPDATA%\Game) ──(move files)──> [Central Storage] (e.g. D:\GameSaves\Game)
+                │                                        ▲
+                └──────────(NTFS junction)───────────────┘
 ```
 
-1. You set a main **Storage folder** (e.g., `D:\GameSaves`).
-2. Select the current folder where a game keeps its saves.
-3. The program:
-   - Moves the saves to `D:\GameSaves\GAME_NAME`.
-   - Creates an **NTFS Junction** at the original path pointing to the new location.
-4. The game continues to work seamlessly, unaware of the relocation, while your files are safely centralized.
-
----
-
-## Usage
-
-1. Specify your **Central Storage Folder**.
-2. Provide the full path to the game's current save directory.
-3. Click **Bind**.
-4. Done! The game will keep loading and saving using its original path.
-
-*Note: Use the **Verify & Restore Broken Links** button to automatically scan your database and re-create junctions after a Windows reinstall.*
-
----
-
-## Important Notes
-
-- This tool relies on **Junctions** (`mklink /J`), which require an **NTFS** file system (the standard for Windows drives).
-- While the file transfer process is fully safe, it is always recommended to make a manual backup the first time you try it on a new game.
-- **Do not delete junction folders manually** via File Explorer - always use the **Unbind** or **Restore** buttons inside the application to manage them safely.
-
----
-
-## Screenshots
-
-![Screenshot](/screenshot.png)
-
----
+1. Set your **Database file** (simple JSON), **Central storage folder** and the game's current save path.
+2. Click **Bind**. SavesBinder moves the folder to storage and creates a junction at the original location.
+3. The game works as before. Your saves are now in one place.
 
 ## Requirements
 
-- **Windows 10 / 11**
-- NTFS-formatted storage drives
+- **Windows 10 22H2 / Windows 11**
+- **NTFS** formatted drives
+- **[.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)** (if not present)
+- **[Windows App Runtime 2.5](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads)** (if not present)
 
----
+## Download & Usage
 
-## Installation & Build
+### Pre-built (recommended)
 
-### Pre-built Binary
+1. Go to the [Releases](https://github.com/valsaven/SavesBinder/releases) page.
+2. Download the latest `.zip` archive (portable folder).
+3. Extract it anywhere (e.g. `D:\Tools\SavesBinder\`).
+4. Run `SavesBinder.exe`.
 
-Go to the [Releases](https://github.com/valsaven/SavesBinder/releases) page, download the latest executable file and run it. No installation required.
+### Build from source
 
-### Building from Source
+Prerequisites:
+- [Visual Studio 2022](https://visualstudio.microsoft.com/) with **.NET Desktop Development** and **Windows App SDK** workloads
+- Or CLI with `dotnet` SDK
 
-If you prefer to compile the application yourself, make sure you have Go installed:
+```bash
+git clone https://github.com/valsaven/SavesBinder.git
+cd SavesBinder
+dotnet restore
+dotnet build SavesBinder.csproj -p:Platform=x64
+```
 
-1. Clone the repository:
+To create a portable publish:
 
-   ```shell
-   git clone git@github.com:valsaven/SavesBinder.git
-   cd SavesBinder
-   git checkout master
-   ```
+```bash
+dotnet publish SavesBinder.csproj -c Release -p:Platform=x64
+```
 
-2. Install dependencies:
+The output will be in `bin\Release\net8.0-windows10.0.19041.0\win-x64\publish\`.
 
-   ```shell
-   go install fyne.io/tools/cmd/fyne@latest
-   go install github.com/akavel/rsrc@latest
+## Important Notes
 
-   go mod tidy
-   ```
+- This tool uses **directory junctions**. They only work on **NTFS** volumes.
+- Always make a quick backup of important saves before binding them for the first time.
+- **Do not delete junctions manually in File Explorer.** Use **Unbind**, **Restore** or **Delete** in the app to avoid data loss.
+- Use **Verify & Restore Broken Links** after reinstalling Windows, moving drives or restoring from backup.
+- If you run the app from a read-only location (like `Program Files`), `settings.json` will not be saved.
+- The app is **portable** — moving the whole folder keeps your settings and DB file if paths are relative or unchanged.
 
-3. Generate icons and Windows resources:
+## Screenshots
 
-   ```shell
-   # Embeds PNG icon for the Fyne app window
-   fyne bundle -o bundled.go Icon.png
-
-   # Generates Windows PE resource for the .exe file icon
-   rsrc -ico floppy-icon.ico -o rsrc.syso
-   ```
-
-4. Compile the production build (hides the background console window and optimizes file size):
-
-   ```shell
-   go build -ldflags="-s -w -H=windowsgui" -o SavesBinder.exe .
-   ```
-
-   or via Fyne package:
-
-   ```shell
-   fyne package -release -os windows
-   ```
-
-5. *(Optional)* Further compress the binary using UPX:
-
-   ```shell
-   upx --best --lzma ".\Val's Saves Binder.exe"
-   ```
-
----
+![SavesBinder Screenshot](screenshot.png)
 
 ## License
 
-This project is licensed under the MIT License - feel free to use, modify, and distribute it.
+This project is licensed under the [MIT License](LICENSE).

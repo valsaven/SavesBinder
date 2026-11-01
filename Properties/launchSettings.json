@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SavesBinder (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SavesBinder (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
